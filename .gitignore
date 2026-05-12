@@ -16,3 +16,6 @@ crash-reports/
 
 # Local symlinks
 run/mods
+
+# Local dev mods (copied from PrismLauncher instance, ~300MB, not for git)
+mods/

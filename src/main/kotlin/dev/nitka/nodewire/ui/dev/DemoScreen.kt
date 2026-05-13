@@ -8,25 +8,29 @@ import androidx.compose.runtime.setValue
 import dev.nitka.nodewire.ui.components.Button
 import dev.nitka.nodewire.ui.components.ButtonDefaults
 import dev.nitka.nodewire.ui.components.Divider
+import dev.nitka.nodewire.ui.components.Surface
+import dev.nitka.nodewire.ui.components.SurfaceDefaults
 import dev.nitka.nodewire.ui.components.Text
+import dev.nitka.nodewire.ui.components.Tooltip
 import dev.nitka.nodewire.ui.core.Modifier
 import dev.nitka.nodewire.ui.core.NwComposeScreen
 import dev.nitka.nodewire.ui.layout.Alignment
 import dev.nitka.nodewire.ui.layout.Arrangement
+import dev.nitka.nodewire.ui.layout.Box
 import dev.nitka.nodewire.ui.layout.Column
 import dev.nitka.nodewire.ui.layout.Row
 import dev.nitka.nodewire.ui.modifier.layout.fillMaxSize
 import dev.nitka.nodewire.ui.modifier.layout.padding
+import dev.nitka.nodewire.ui.modifier.layout.size
 import dev.nitka.nodewire.ui.modifier.style.background
 import dev.nitka.nodewire.ui.theme.NwTheme
 import dev.nitka.nodewire.ui.theme.NwThemeProvider
 import net.minecraft.network.chat.Component
 
 /**
- * Phase 11 demo: four [Button] variants with a click counter at the top.
- * Each button increments [clicks]; the Text above reads the counter.
- * Demonstrates Surface/Button/Divider + per-state styling + content-color
- * cascade (Text inside Button picks up `LocalContentColor`).
+ * Phase 12 — comprehensive showcase. Visual sanity check across the full
+ * component surface: typography ramp, pin-type color swatches, button
+ * variants in all states, tooltip with delay.
  *
  * Bound to the `N` key by [NodewireClient]. Open in-world, ESC to close.
  */
@@ -43,27 +47,101 @@ class DemoScreen : NwComposeScreen(Component.literal("Nodewire Demo")) {
                 verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space12),
                 horizontalAlignment = Alignment.Start,
             ) {
-                Text("Buttons", style = NwTheme.typography.title)
+                Text("Nodewire UI", style = NwTheme.typography.title)
                 Text(
-                    "Clicked $clicks times",
+                    "Compose-runtime + Yoga + GuiGraphics. Phase 12.",
                     style = NwTheme.typography.body.copy(color = NwTheme.colors.onSurfaceMuted),
                 )
                 Divider()
-                Row(horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space8)) {
-                    Button(onClick = { clicks++ }) {
-                        Text("Filled")
-                    }
-                    Button(onClick = { clicks++ }, style = ButtonDefaults.outlined()) {
-                        Text("Outlined")
-                    }
-                    Button(onClick = { clicks++ }, style = ButtonDefaults.ghost()) {
-                        Text("Ghost")
-                    }
-                    Button(onClick = { clicks++ }, style = ButtonDefaults.danger()) {
-                        Text("Danger")
-                    }
-                    Button(onClick = { clicks++ }, enabled = false) {
-                        Text("Disabled")
+
+                TypographySection()
+                Divider()
+
+                PinPalette()
+                Divider()
+
+                ButtonGallery(clicks = clicks, onClick = { clicks++ })
+                Divider()
+
+                TooltipDemo()
+            }
+        }
+    }
+
+    @Composable
+    private fun TypographySection() {
+        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space4)) {
+            Text("Typography", style = NwTheme.typography.subtitle)
+            Text("Title", style = NwTheme.typography.title)
+            Text("Subtitle", style = NwTheme.typography.subtitle)
+            Text("Body — the quick brown fox jumps over the lazy dog.")
+            Text(
+                "caption text",
+                style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+            )
+        }
+    }
+
+    @Composable
+    private fun PinPalette() {
+        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space4)) {
+            Text("Pin types", style = NwTheme.typography.subtitle)
+            Row(horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space6)) {
+                PinSwatch("bool", NwTheme.colors.pinBool)
+                PinSwatch("int", NwTheme.colors.pinInt)
+                PinSwatch("float", NwTheme.colors.pinFloat)
+                PinSwatch("vec2", NwTheme.colors.pinVec2)
+                PinSwatch("vec3", NwTheme.colors.pinVec3)
+                PinSwatch("quat", NwTheme.colors.pinQuat)
+            }
+        }
+    }
+
+    @Composable
+    private fun PinSwatch(label: String, color: dev.nitka.nodewire.ui.render.Color) {
+        Column(
+            horizontalAlignment = Alignment.Center,
+            verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space2),
+        ) {
+            Box(modifier = Modifier.size(20).background(color))
+            Text(
+                label,
+                style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+            )
+        }
+    }
+
+    @Composable
+    private fun ButtonGallery(clicks: Int, onClick: () -> Unit) {
+        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space4)) {
+            Text("Buttons", style = NwTheme.typography.subtitle)
+            Text(
+                "Clicked $clicks times.",
+                style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space8)) {
+                Button(onClick = onClick) { Text("Filled") }
+                Button(onClick = onClick, style = ButtonDefaults.outlined()) { Text("Outlined") }
+                Button(onClick = onClick, style = ButtonDefaults.ghost()) { Text("Ghost") }
+                Button(onClick = onClick, style = ButtonDefaults.danger()) { Text("Danger") }
+                Button(onClick = onClick, enabled = false) { Text("Disabled") }
+            }
+        }
+    }
+
+    @Composable
+    private fun TooltipDemo() {
+        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space4)) {
+            Text("Tooltip (hover for 400ms)", style = NwTheme.typography.subtitle)
+            Row(horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space8)) {
+                Tooltip(text = "Filled button — primary action") {
+                    Button(onClick = {}) { Text("Hover me") }
+                }
+                Tooltip(text = "Outlined — secondary") {
+                    Surface(style = SurfaceDefaults.outlined()) {
+                        Box(modifier = Modifier.size(80, 24).padding(NwTheme.dimens.space4)) {
+                            Text("Outlined surface")
+                        }
                     }
                 }
             }

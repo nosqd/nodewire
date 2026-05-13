@@ -2,11 +2,14 @@ package dev.nitka.nodewire.ui.theme
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import dev.nitka.nodewire.ui.overlay.OverlayHost
 import net.minecraft.client.Minecraft
 
 /**
- * Root of any Nodewire UI tree. Installs theme tokens + the MC font handle
- * as CompositionLocals so descendants can read [NwTheme.colors] etc.
+ * Root of any Nodewire UI tree. Installs theme tokens, the MC font handle,
+ * and an [OverlayHost] (so [Popup] / [Dialog] / [Tooltip] work without
+ * extra wrapping). [LocalScreenSize] is provided by [NwComposeScreen]
+ * higher up and reaches this scope transparently.
  *
  * Defaults to the [NwColors.Dark] palette. Pass alternate tokens to skin a
  * subtree (e.g. inside a popover that wants a different background).
@@ -25,6 +28,7 @@ fun NwThemeProvider(
         LocalNwShapes provides shapes,
         LocalNwTypography provides typography,
         LocalFont provides Minecraft.getInstance().font,
-        content = content,
-    )
+    ) {
+        OverlayHost(content = content)
+    }
 }

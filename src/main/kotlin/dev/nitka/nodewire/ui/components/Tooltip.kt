@@ -8,29 +8,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import dev.nitka.nodewire.ui.core.Modifier
 import dev.nitka.nodewire.ui.layout.Box
+import dev.nitka.nodewire.ui.layout.LayoutCoordinates
 import dev.nitka.nodewire.ui.layout.PaddingValues
 import dev.nitka.nodewire.ui.modifier.input.onHover
-import dev.nitka.nodewire.ui.modifier.input.onSizeChanged
-import dev.nitka.nodewire.ui.modifier.layout.absolutePosition
+import dev.nitka.nodewire.ui.modifier.input.onPositioned
+import dev.nitka.nodewire.ui.overlay.Popup
+import dev.nitka.nodewire.ui.overlay.PopupPlacement
+import dev.nitka.nodewire.ui.overlay.PopupPosition
 import dev.nitka.nodewire.ui.render.BorderStroke
 import dev.nitka.nodewire.ui.theme.NwTheme
 import kotlinx.coroutines.delay
 
 /**
- * Wraps [content] with a hover-delayed text tooltip rendered just below it.
+ * Hover-delayed tooltip. Wraps [content] in a Box that tracks hover state
+ * and its own screen position, then publishes a [Popup] beneath itself via
+ * the overlay layer once the pointer's been still over the target for
+ * [delayMs]. The popup edge-flips above the target if there's no room
+ * below, and is clamped to the screen on either axis.
  *
- * Behavior:
- *   * Pointer enters → [LaunchedEffect] schedules `visible = true` after
- *     [delayMs]. Leaving cancels the coroutine (LaunchedEffect's keyed
- *     restart semantics) so quick brushes don't flash a tooltip.
- *   * Visible tooltip is an absolutely-positioned [Surface] below the target
- *     — outside parent flow, so it doesn't push other layout around. It
- *     paints after the target because it's the second child of the wrapper
- *     Box (siblings paint in declaration order).
- *
- * Limitations: no smart edge-flipping (a tooltip near the bottom of the
- * screen will be clipped); single-line text only. Both lift once Phase 13+
- * adds a real popup layer.
+ * Replaces the Phase-12 in-flow tooltip — the new one is no longer
+ * constrained by parent bounds (parent's `overflow=hidden` won't clip it)
+ * and renders above sibling content because it lives in the overlay layer.
  */
 @Composable
 fun Tooltip(
@@ -41,7 +39,7 @@ fun Tooltip(
 ) {
     var hovered by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
-    var targetHeight by remember { mutableStateOf(0) }
+    var anchor by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     LaunchedEffect(hovered) {
         if (hovered) {
@@ -52,22 +50,37 @@ fun Tooltip(
         }
     }
 
-    Box(modifier = modifier.onHover { hovered = it }) {
-        Box(modifier = Modifier.onSizeChanged { targetHeight = it.height }) {
-            content()
+    Box(
+        modifier = modifier
+            .onHover { hovered = it }
+            .onPositioned { anchor = it },
+    ) {
+        content()
+    }
+
+    val a = anchor
+    if (visible && a != null) {
+        Popup(
+            position = PopupPosition.Anchored(a, PopupPlacement.Below, gap = NwTheme.dimens.space4),
+        ) {
+            TooltipPanel(text)
         }
-        if (visible) {
-            Surface(
-                modifier = Modifier.absolutePosition(0, targetHeight + NwTheme.dimens.space4),
-                style = SurfaceStyle(
-                    color = NwTheme.colors.surface,
-                    shape = NwTheme.shapes.small,
-                    border = BorderStroke(NwTheme.dimens.borderThin, NwTheme.colors.border),
-                    padding = PaddingValues(horizontal = NwTheme.dimens.space6, vertical = NwTheme.dimens.space2),
-                ),
-            ) {
-                Text(text, style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurface))
-            }
-        }
+    }
+}
+
+@Composable
+private fun TooltipPanel(text: String) {
+    Surface(
+        style = SurfaceStyle(
+            color = NwTheme.colors.surface,
+            shape = NwTheme.shapes.small,
+            border = BorderStroke(NwTheme.dimens.borderThin, NwTheme.colors.border),
+            padding = PaddingValues(horizontal = NwTheme.dimens.space6, vertical = NwTheme.dimens.space2),
+        ),
+    ) {
+        Text(
+            text,
+            style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurface),
+        )
     }
 }

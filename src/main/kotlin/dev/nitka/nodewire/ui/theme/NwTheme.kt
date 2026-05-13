@@ -3,6 +3,7 @@ package dev.nitka.nodewire.ui.theme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import dev.nitka.nodewire.ui.layout.IntSize
 import net.minecraft.client.gui.Font
 
 /**
@@ -39,6 +40,16 @@ val LocalFont = staticCompositionLocalOf<Font> {
  */
 val LocalContentColor =
     staticCompositionLocalOf<dev.nitka.nodewire.ui.render.Color?> { null }
+
+/**
+ * Current screen size in GUI pixels. Provided by [NwThemeProvider] which
+ * reads it from [NwUiOwner.screenSize] (a [MutableState] updated each
+ * frame). Read it from any composable that needs to position overlays /
+ * clamp popups / compute responsive layout.
+ *
+ * Reads are tracked — recomposes will fire if the window resizes mid-frame.
+ */
+val LocalScreenSize = staticCompositionLocalOf { IntSize.Zero }
 
 /**
  * Single static accessor for all theme axes. Use as `NwTheme.colors.accent`,

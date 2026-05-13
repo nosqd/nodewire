@@ -3,14 +3,18 @@ package dev.nitka.nodewire.ui.core
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import dev.nitka.nodewire.ui.input.PointerEvent
 import dev.nitka.nodewire.ui.input.PointerHandler
 import dev.nitka.nodewire.ui.input.absoluteOffset
 import dev.nitka.nodewire.ui.input.hitTest
 import dev.nitka.nodewire.ui.layout.IntSize
+import dev.nitka.nodewire.ui.layout.LayoutCoordinates
 import dev.nitka.nodewire.ui.modifier.input.OnHoverModifier
+import dev.nitka.nodewire.ui.modifier.input.OnPositionedModifier
 import dev.nitka.nodewire.ui.modifier.input.OnSizeChangedModifier
 import dev.nitka.nodewire.ui.render.NwCanvas
 import dev.nitka.nodewire.ui.render.renderWalk
@@ -70,6 +74,13 @@ class NwUiOwner {
     /** Currently-hovered nodes — kept so we can fire `OnHoverModifier(false)` on exit. */
     private val hoveredNodes = mutableSetOf<UiNode>()
 
+    /**
+     * Screen size read by the composition (via `LocalScreenSize`). Updated
+     * each [frame] so popup / overlay code can position relative to the
+     * window without poking `Minecraft.getInstance()`.
+     */
+    val screenSize: MutableState<IntSize> = mutableStateOf(IntSize.Zero)
+
     private var running = false
 
     fun start(content: @Composable () -> Unit) {
@@ -91,25 +102,37 @@ class NwUiOwner {
             hasFrameWaiters = false
             clock.sendFrame(System.nanoTime())
         }
+        val size = IntSize(w, h)
+        if (screenSize.value != size) screenSize.value = size
         root.yoga.calculateLayout(w.toFloat(), h.toFloat())
-        postLayoutWalk(root)
+        postLayoutWalk(root, 0, 0)
         root.renderWalk(canvas)
     }
 
     /**
-     * Walks the tree after layout to fire `onSizeChanged` callbacks for
-     * nodes whose computed size changed since last frame. First-frame fires
-     * unconditionally (`lastSize == null`).
+     * After layout, walk the tree firing `onSizeChanged` and `onPositioned`
+     * callbacks for nodes whose geometry changed since last frame. Each
+     * modifier tracks its own last-seen value so callbacks only fire on
+     * change; the first frame after composition always fires (state is null).
      */
-    private fun postLayoutWalk(node: UiNode) {
-        val currentSize = IntSize(node.layoutWidth, node.layoutHeight)
+    private fun postLayoutWalk(node: UiNode, parentScreenX: Int, parentScreenY: Int) {
+        val screenX = parentScreenX + node.layoutX
+        val screenY = parentScreenY + node.layoutY
+        val size = IntSize(node.layoutWidth, node.layoutHeight)
+        val coords = LayoutCoordinates(screenX, screenY, size.width, size.height)
         for (mod in node.inputModifiers) {
-            if (mod is OnSizeChangedModifier && mod.lastSize != currentSize) {
-                mod.lastSize = currentSize
-                mod.callback(currentSize)
+            when (mod) {
+                is OnSizeChangedModifier -> if (mod.lastSize != size) {
+                    mod.lastSize = size
+                    mod.callback(size)
+                }
+                is OnPositionedModifier -> if (mod.lastCoords != coords) {
+                    mod.lastCoords = coords
+                    mod.callback(coords)
+                }
             }
         }
-        for (child in node.children) postLayoutWalk(child)
+        for (child in node.children) postLayoutWalk(child, screenX, screenY)
     }
 
     /**

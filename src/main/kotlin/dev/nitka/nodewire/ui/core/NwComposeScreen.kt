@@ -1,8 +1,10 @@
 package dev.nitka.nodewire.ui.core
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import dev.nitka.nodewire.ui.input.PointerEvent
 import dev.nitka.nodewire.ui.render.NwCanvas
+import dev.nitka.nodewire.ui.theme.LocalScreenSize
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.gui.screens.Screen
@@ -28,7 +30,14 @@ abstract class NwComposeScreen(title: Component) : Screen(title) {
 
     override fun init() {
         super.init()
-        owner.start { Content() }
+        // Provide the screen-size CompositionLocal at the very top of the
+        // composition. The owner's screenSize state is updated each frame()
+        // call, so any composable reading LocalScreenSize sees fresh values.
+        owner.start {
+            CompositionLocalProvider(LocalScreenSize provides owner.screenSize.value) {
+                Content()
+            }
+        }
     }
 
     override fun render(gfx: GuiGraphics, mouseX: Int, mouseY: Int, partialTick: Float) {

@@ -7,6 +7,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import dev.nitka.nodewire.ui.components.Button
 import dev.nitka.nodewire.ui.components.ButtonDefaults
+import dev.nitka.nodewire.ui.components.Dialog
+import dev.nitka.nodewire.ui.components.DialogContent
 import dev.nitka.nodewire.ui.components.Divider
 import dev.nitka.nodewire.ui.components.Surface
 import dev.nitka.nodewire.ui.components.SurfaceDefaults
@@ -64,6 +66,41 @@ class DemoScreen : NwComposeScreen(Component.literal("Nodewire Demo")) {
                 Divider()
 
                 TooltipDemo()
+                Divider()
+
+                DialogDemo()
+            }
+        }
+    }
+
+    @Composable
+    private fun DialogDemo() {
+        var open by remember { mutableStateOf(false) }
+        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space4)) {
+            Text("Dialog", style = NwTheme.typography.subtitle)
+            Button(onClick = { open = true }) { Text("Open dialog") }
+        }
+        if (open) {
+            Dialog(onDismissRequest = { open = false }) {
+                DialogContent {
+                    Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space8)) {
+                        Text("Confirm action", style = NwTheme.typography.title)
+                        Text(
+                            "Click outside the panel or press Cancel to dismiss.",
+                            style = NwTheme.typography.body.copy(color = NwTheme.colors.onSurfaceMuted),
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space8),
+                        ) {
+                            Button(onClick = { open = false }, style = ButtonDefaults.ghost()) {
+                                Text("Cancel")
+                            }
+                            Button(onClick = { open = false }) {
+                                Text("Confirm")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

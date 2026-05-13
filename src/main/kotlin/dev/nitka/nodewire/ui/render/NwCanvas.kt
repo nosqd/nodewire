@@ -119,4 +119,17 @@ class NwCanvas(val gfx: GuiGraphics, val font: Font) {
     fun popClip() {
         gfx.disableScissor()
     }
+
+    /**
+     * Commits any buffered geometry (notably text — `gfx.drawString` queues
+     * into a separate buffer that's normally flushed at the end of the GUI
+     * frame). Call before painting a popup / overlay so prior text doesn't
+     * render *above* the popup's background.
+     *
+     * Cost: forces a small render-state batch — fine for the handful of
+     * popups per frame, don't sprinkle inside hot paint loops.
+     */
+    fun flush() {
+        gfx.flush()
+    }
 }

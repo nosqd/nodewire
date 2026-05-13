@@ -1,0 +1,128 @@
+package dev.nitka.nodewire.net
+
+import com.mojang.logging.LogUtils
+import dev.nitka.nodewire.block.LogicBlockEntity
+import dev.nitka.nodewire.graph.NodeGraph
+import dev.nitka.nodewire.graph.NodeId
+import dev.nitka.nodewire.graph.PinRef
+import net.minecraft.core.BlockPos
+import net.minecraft.nbt.CompoundTag
+import net.minecraft.network.FriendlyByteBuf
+import net.minecraft.world.level.block.Block
+import net.minecraftforge.network.NetworkEvent
+import org.slf4j.Logger
+import java.util.function.Supplier
+
+/**
+ * Client → server: persist the user's edited graph for the [LogicBlockEntity]
+ * at [pos]. Server-side handler validates everything before writing:
+ *
+ *   1. Sender must be within 8 blocks of [pos] (anti-cheat).
+ *   2. A [LogicBlockEntity] must exist at [pos].
+ *   3. NBT must parse into a [NodeGraph] without throwing.
+ *   4. Every edge must reference real pins on real nodes.
+ *   5. Edge endpoint types must match (`from.type == to.type`).
+ *   6. No two edges may share the same input (`Edge.to`).
+ *   7. The graph must be acyclic.
+ *
+ * Failing any check drops the packet with a warning log — no exception
+ * leaks back to the client, and the BE keeps its previous graph.
+ */
+class SaveGraphPacket(val pos: BlockPos, val graphTag: CompoundTag) {
+
+    fun encode(buf: FriendlyByteBuf) {
+        buf.writeBlockPos(pos)
+        buf.writeNbt(graphTag)
+    }
+
+    fun handle(ctx: Supplier<NetworkEvent.Context>): Boolean {
+        val c = ctx.get()
+        c.enqueueWork {
+            val player = c.sender ?: return@enqueueWork
+            val level = player.level()
+            val center = pos.center
+            if (player.distanceToSqr(center.x, center.y, center.z) > MAX_DISTANCE_SQR) {
+                LOG.warn("Rejecting SaveGraphPacket: {} too far from {}", player.gameProfile.name, pos)
+                return@enqueueWork
+            }
+            val be = level.getBlockEntity(pos) as? LogicBlockEntity ?: run {
+                LOG.warn("Rejecting SaveGraphPacket: no LogicBlockEntity at {}", pos)
+                return@enqueueWork
+            }
+            val graph = try {
+                NodeGraph.fromNbt(graphTag)
+            } catch (t: Throwable) {
+                LOG.warn("Rejecting SaveGraphPacket: malformed NBT — ${t.message}")
+                return@enqueueWork
+            }
+            val reason = validate(graph)
+            if (reason != null) {
+                LOG.warn("Rejecting SaveGraphPacket from {}: {}", player.gameProfile.name, reason)
+                return@enqueueWork
+            }
+            be.graph = graph
+            be.setChanged()
+            level.sendBlockUpdated(pos, be.blockState, be.blockState, Block.UPDATE_CLIENTS)
+        }
+        c.packetHandled = true
+        return true
+    }
+
+    companion object {
+        private val LOG: Logger = LogUtils.getLogger()
+
+        // 8 blocks (squared) — same reach Minecraft uses for interactions.
+        private const val MAX_DISTANCE_SQR = 8.0 * 8.0
+
+        fun decode(buf: FriendlyByteBuf): SaveGraphPacket =
+            SaveGraphPacket(buf.readBlockPos(), buf.readNbt() ?: CompoundTag())
+
+        /**
+         * Returns `null` if the graph is valid, otherwise a short reason
+         * string for logging. Public so tests can pin down the rules.
+         */
+        fun validate(graph: NodeGraph): String? {
+            val seenInputs = mutableSetOf<PinRef>()
+            for (edge in graph.edges) {
+                val fromNode = graph.nodes[edge.from.node]
+                    ?: return "edge.from.node not in graph: ${edge.from.node}"
+                val toNode = graph.nodes[edge.to.node]
+                    ?: return "edge.to.node not in graph: ${edge.to.node}"
+                val fromPin = fromNode.outputs.firstOrNull { it.id == edge.from.pin }
+                    ?: return "no output pin ${edge.from.pin} on ${edge.from.node}"
+                val toPin = toNode.inputs.firstOrNull { it.id == edge.to.pin }
+                    ?: return "no input pin ${edge.to.pin} on ${edge.to.node}"
+                if (fromPin.type != toPin.type) {
+                    return "type mismatch: ${fromPin.type} → ${toPin.type}"
+                }
+                if (!seenInputs.add(edge.to)) {
+                    return "duplicate edges into input ${edge.to}"
+                }
+            }
+            if (hasCycle(graph)) return "graph contains a cycle"
+            return null
+        }
+
+        private fun hasCycle(graph: NodeGraph): Boolean {
+            val adj: Map<NodeId, List<NodeId>> = graph.edges
+                .groupBy { it.from.node }
+                .mapValues { (_, edges) -> edges.map { it.to.node } }
+
+            val visited = mutableSetOf<NodeId>()
+            val onStack = mutableSetOf<NodeId>()
+
+            fun dfs(n: NodeId): Boolean {
+                if (n in onStack) return true
+                if (n in visited) return false
+                visited.add(n); onStack.add(n)
+                for (next in adj[n].orEmpty()) {
+                    if (dfs(next)) return true
+                }
+                onStack.remove(n)
+                return false
+            }
+
+            return graph.nodes.keys.any { it !in visited && dfs(it) }
+        }
+    }
+}

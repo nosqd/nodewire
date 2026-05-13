@@ -2,6 +2,7 @@ package dev.nitka.nodewire
 
 import com.mojang.logging.LogUtils
 import dev.nitka.nodewire.graph.StockNodeTypes
+import dev.nitka.nodewire.net.NodewireNetwork
 import net.minecraftforge.api.distmarker.Dist
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.loading.FMLEnvironment
@@ -16,6 +17,7 @@ object Nodewire {
     init {
         Registry.register(MOD_BUS)
         StockNodeTypes.registerAll()
+        NodewireNetwork.register()
         if (FMLEnvironment.dist == Dist.CLIENT) {
             dev.nitka.nodewire.client.NodewireClient.registerOnModBus(MOD_BUS)
         }

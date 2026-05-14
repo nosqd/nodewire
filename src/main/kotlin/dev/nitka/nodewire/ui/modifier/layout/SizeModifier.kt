@@ -5,26 +5,26 @@ import dev.nitka.nodewire.ui.core.Modifier
 import org.appliedenergistics.yoga.YogaNode
 import org.appliedenergistics.yoga.style.StyleSizeLength
 
+/**
+ * Repeating `.size(...)` / `.width(...)` / `.height(...)` is last-wins.
+ */
 data class SizeModifier(
     val width: Int? = null,
     val height: Int? = null,
 ) : LayoutModifierElement<SizeModifier> {
-    override fun mergeWith(other: SizeModifier) =
-        SizeModifier(other.width ?: width, other.height ?: height)
-
     override fun applyTo(yoga: YogaNode) {
         width?.let { yoga.setWidth(StyleSizeLength.points(it.toFloat())) }
         height?.let { yoga.setHeight(StyleSizeLength.points(it.toFloat())) }
     }
 }
 
+/**
+ * Repeating `.fillMaxSize/Width/Height(...)` is last-wins.
+ */
 data class FillModifier(
     val width: Boolean = false,
     val height: Boolean = false,
 ) : LayoutModifierElement<FillModifier> {
-    override fun mergeWith(other: FillModifier) =
-        FillModifier(width || other.width, height || other.height)
-
     override fun applyTo(yoga: YogaNode) {
         if (width) yoga.setWidth(StyleSizeLength.percent(100f))
         if (height) yoga.setHeight(StyleSizeLength.percent(100f))

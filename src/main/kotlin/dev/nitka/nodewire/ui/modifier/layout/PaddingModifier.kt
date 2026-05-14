@@ -7,14 +7,16 @@ import org.appliedenergistics.yoga.YogaEdge
 import org.appliedenergistics.yoga.YogaNode
 import org.appliedenergistics.yoga.style.StyleLength
 
+/**
+ * Repeating `.padding(...)` in a chain is last-wins: the final call's
+ * values overwrite earlier ones (Yoga stores one value per edge).
+ */
 data class PaddingModifier(
     val start: Int = 0,
     val top: Int = 0,
     val end: Int = 0,
     val bottom: Int = 0,
 ) : LayoutModifierElement<PaddingModifier> {
-    override fun mergeWith(other: PaddingModifier) = other // last-wins
-
     override fun applyTo(yoga: YogaNode) {
         yoga.setPadding(YogaEdge.LEFT, StyleLength.points(start.toFloat()))
         yoga.setPadding(YogaEdge.TOP, StyleLength.points(top.toFloat()))

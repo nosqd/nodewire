@@ -10,10 +10,10 @@ import org.appliedenergistics.yoga.style.StyleLength
 /**
  * Translates a node by (x, y) relative to where the layout would place it.
  * Doesn't affect siblings or take it out of flow — Yoga's [RELATIVE] position.
+ *
+ * Repeating `.offset(...)` is last-wins.
  */
 data class OffsetModifier(val x: Int, val y: Int) : LayoutModifierElement<OffsetModifier> {
-    override fun mergeWith(other: OffsetModifier) = other
-
     override fun applyTo(yoga: YogaNode) {
         yoga.setPosition(YogaEdge.LEFT, StyleLength.points(x.toFloat()))
         yoga.setPosition(YogaEdge.TOP, StyleLength.points(y.toFloat()))
@@ -23,10 +23,10 @@ data class OffsetModifier(val x: Int, val y: Int) : LayoutModifierElement<Offset
 /**
  * Places a node at absolute (x, y) within its parent's padding box. Removes
  * it from the flex flow — siblings layout as if this child didn't exist.
+ *
+ * Repeating `.absolutePosition(...)` is last-wins.
  */
 data class AbsolutePositionModifier(val x: Int, val y: Int) : LayoutModifierElement<AbsolutePositionModifier> {
-    override fun mergeWith(other: AbsolutePositionModifier) = other
-
     override fun applyTo(yoga: YogaNode) {
         yoga.setPositionType(YogaPositionType.ABSOLUTE)
         yoga.setPosition(YogaEdge.LEFT, StyleLength.points(x.toFloat()))

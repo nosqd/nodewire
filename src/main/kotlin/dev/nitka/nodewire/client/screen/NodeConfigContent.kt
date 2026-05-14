@@ -35,7 +35,7 @@ import dev.nitka.nodewire.ui.theme.NwTheme
  * decide what config UI (if any) appears inside its card.
  *
  * Pattern: each composable owns a `remember`d state primed from
- * [Node.config], with the change handler writing back to `node.config`
+ * [Node.config], with the change handler writing back via [EditorState.updateNode]
  * AND updating local state so Compose re-renders. The config tag is the
  * source of truth on save; local state is only for in-session reactivity.
  */
@@ -53,8 +53,11 @@ object NodeConfigContent {
                 onValueChange = { new ->
                     val filtered = new.filterIndexed { i, c -> c.isDigit() || (c == '-' && i == 0) }
                     text = filtered
-                    node.config.putInt("value", filtered.toIntOrNull() ?: 0)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putInt("value", filtered.toIntOrNull() ?: 0)
+                        })
+                    }
                 },
             )
         }
@@ -81,8 +84,11 @@ object NodeConfigContent {
                         }
                     }
                     text = filtered
-                    node.config.putFloat("value", filtered.toFloatOrNull() ?: 0f)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putFloat("value", filtered.toFloatOrNull() ?: 0f)
+                        })
+                    }
                 },
             )
         }
@@ -99,8 +105,11 @@ object NodeConfigContent {
                 placeholder = "(empty)",
                 onValueChange = { new ->
                     text = new
-                    node.config.putString("value", new)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putString("value", new)
+                        })
+                    }
                 },
             )
         }
@@ -115,11 +124,14 @@ object NodeConfigContent {
                 modifier = Modifier.fillMaxWidth(),
                 value = text,
                 onValueChange = { new ->
-                    val filtered = new.filter { it.isDigit() }
+                    val filtered = new.filter { ch -> ch.isDigit() }
                     text = filtered
                     val v = (filtered.toIntOrNull() ?: 0).coerceIn(0, 200)
-                    node.config.putInt("delay", v)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putInt("delay", v)
+                        })
+                    }
                 },
             )
         }
@@ -134,11 +146,14 @@ object NodeConfigContent {
                 modifier = Modifier.fillMaxWidth(),
                 value = text,
                 onValueChange = { new ->
-                    val filtered = new.filter { it.isDigit() }
+                    val filtered = new.filter { ch -> ch.isDigit() }
                     text = filtered
                     val v = (filtered.toIntOrNull() ?: 0).coerceIn(0, 100)
-                    node.config.putInt("probability", v)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putInt("probability", v)
+                        })
+                    }
                 },
             )
         }
@@ -157,8 +172,11 @@ object NodeConfigContent {
                     onValueChange = { new ->
                         val filtered = new.filterIndexed { i, c -> c.isDigit() || (c == '-' && i == 0) }
                         minText = filtered
-                        node.config.putInt("min", filtered.toIntOrNull() ?: 0)
-                        editor?.bumpGraphVersion()
+                        editor?.updateNode(node.id) { n ->
+                            n.copy(config = n.config.copy().apply {
+                                putInt("min", filtered.toIntOrNull() ?: 0)
+                            })
+                        }
                     },
                 )
             }
@@ -169,8 +187,11 @@ object NodeConfigContent {
                     onValueChange = { new ->
                         val filtered = new.filterIndexed { i, c -> c.isDigit() || (c == '-' && i == 0) }
                         maxText = filtered
-                        node.config.putInt("max", filtered.toIntOrNull() ?: 0)
-                        editor?.bumpGraphVersion()
+                        editor?.updateNode(node.id) { n ->
+                            n.copy(config = n.config.copy().apply {
+                                putInt("max", filtered.toIntOrNull() ?: 0)
+                            })
+                        }
                     },
                 )
             }
@@ -186,11 +207,14 @@ object NodeConfigContent {
                 modifier = Modifier.fillMaxWidth(),
                 value = text,
                 onValueChange = { new ->
-                    val filtered = new.filter { it.isDigit() }
+                    val filtered = new.filter { ch -> ch.isDigit() }
                     text = filtered
                     val v = (filtered.toIntOrNull() ?: 0).coerceAtLeast(1)
-                    node.config.putInt("period", v)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putInt("period", v)
+                        })
+                    }
                 },
             )
         }
@@ -208,8 +232,11 @@ object NodeConfigContent {
                 selected = face,
                 onSelect = { next ->
                     face = next
-                    node.config.putString("face", next)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putString("face", next)
+                        })
+                    }
                 },
                 label = { it },
             )
@@ -235,8 +262,11 @@ object NodeConfigContent {
                     placeholder = "channel",
                     onValueChange = { new ->
                         name = new
-                        node.config.putString("name", new)
-                        editor?.bumpGraphVersion()
+                        editor?.updateNode(node.id) { n ->
+                            n.copy(config = n.config.copy().apply {
+                                putString("name", new)
+                            })
+                        }
                     },
                 )
             }
@@ -246,7 +276,7 @@ object NodeConfigContent {
                     selected = type,
                     onSelect = { next ->
                         type = next
-                        editor?.changeChannelType(node, next)
+                        editor?.changeChannelType(node.id, next)
                     },
                     label = { it.name.lowercase() },
                 )
@@ -280,11 +310,15 @@ object NodeConfigContent {
                     selected = sourceType,
                     onSelect = { next ->
                         val defaultMode = defaultModeFor(next)
-                        node.config.putString("sourceType", next.name)
-                        node.config.putString("mode", defaultMode)
                         sourceType = next
                         mode = defaultMode
-                        editor?.changeConverterInput(node, next)
+                        editor?.updateNode(node.id) { n ->
+                            n.copy(config = n.config.copy().apply {
+                                putString("sourceType", next.name)
+                                putString("mode", defaultMode)
+                            })
+                        }
+                        editor?.changeConverterInput(node.id, next)
                     },
                     label = { it.name.lowercase() },
                 )
@@ -296,8 +330,11 @@ object NodeConfigContent {
                     selected = mode,
                     onSelect = { next ->
                         mode = next
-                        node.config.putString("mode", next)
-                        editor?.bumpGraphVersion()
+                        editor?.updateNode(node.id) { n ->
+                            n.copy(config = n.config.copy().apply {
+                                putString("mode", next)
+                            })
+                        }
                     },
                     label = { it },
                 )
@@ -352,8 +389,11 @@ object NodeConfigContent {
                 onValueChange = { new ->
                     val f = new.filterIndexed { i, c -> c.isDigit() || (c == '-' && i == 0) }
                     text = f
-                    node.config.putInt(key, f.toIntOrNull() ?: 0)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putInt(key, f.toIntOrNull() ?: 0)
+                        })
+                    }
                 },
             )
         }
@@ -378,8 +418,11 @@ object NodeConfigContent {
                         }
                     }
                     text = f
-                    node.config.putFloat(key, f.toFloatOrNull() ?: 0f)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putFloat(key, f.toFloatOrNull() ?: 0f)
+                        })
+                    }
                 },
             )
         }
@@ -430,8 +473,11 @@ object NodeConfigContent {
                 checked = value,
                 onCheckedChange = { v ->
                     value = v
-                    node.config.putBoolean("value", v)
-                    editor?.bumpGraphVersion()
+                    editor?.updateNode(node.id) { n ->
+                        n.copy(config = n.config.copy().apply {
+                            putBoolean("value", v)
+                        })
+                    }
                 },
             )
             Text(

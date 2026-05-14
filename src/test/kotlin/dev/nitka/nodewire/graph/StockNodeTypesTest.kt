@@ -35,7 +35,9 @@ class StockNodeTypesTest {
         // Phase 3: ADD_INT, ADD_FLOAT, SUB_INT, SUB_FLOAT, MUL_INT, MUL_FLOAT,
         //          DIV_INT, DIV_FLOAT, MOD_INT replaced by MATH (-9 +1 = -8 → 30).
         // Phase 4: COMPARE_INT, COMPARE_FLOAT replaced by COMPARE (-2 +1 = -1 → 29).
-        assertEquals(29, NodeTypeRegistry.all().size)
+        // Phase 5: INT_TO_FLOAT, FLOAT_TO_INT, BOOL_TO_INT, INT_TO_BOOL replaced by CONVERT
+        //          (-4 +1 = -3 → 26).
+        assertEquals(26, NodeTypeRegistry.all().size)
     }
 
     @Test

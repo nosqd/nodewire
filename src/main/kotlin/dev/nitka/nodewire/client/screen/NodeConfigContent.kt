@@ -711,4 +711,56 @@ object NodeConfigContent {
         PinType.INT -> listOf("ADD", "SUB", "MUL", "DIV", "MOD")
         else -> listOf("ADD", "SUB", "MUL", "DIV")
     }
+
+    /**
+     * Convert: source type selector + target type selector.
+     * Valid pairs: INT↔FLOAT, INT↔BOOL (BOOL↔FLOAT excluded).
+     * Switching source resets target to the first valid option if the
+     * current target is no longer valid for the new source.
+     */
+    val Convert: @Composable (Node) -> Unit = { node ->
+        val editor = LocalEditorState.current
+        var source by remember(node.id) {
+            mutableStateOf(PinType.fromName(node.config.getString("sourceType").ifEmpty { PinType.INT.name }))
+        }
+        var target by remember(node.id) {
+            mutableStateOf(PinType.fromName(node.config.getString("targetType").ifEmpty { PinType.FLOAT.name }))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space2)) {
+            LabeledRow("From") {
+                Select(
+                    options = CONVERT_SOURCES,
+                    selected = source,
+                    onSelect = { next ->
+                        source = next
+                        val newTarget = validTargetsFor(next).firstOrNull { it == target }
+                            ?: validTargetsFor(next).first()
+                        target = newTarget
+                        editor?.changeConvertTypes(node.id, next, newTarget)
+                    },
+                    label = { it.name.lowercase() },
+                )
+            }
+            LabeledRow("To") {
+                Select(
+                    options = validTargetsFor(source),
+                    selected = target,
+                    onSelect = { next ->
+                        target = next
+                        editor?.changeConvertTypes(node.id, source, next)
+                    },
+                    label = { it.name.lowercase() },
+                )
+            }
+        }
+    }
+
+    private val CONVERT_SOURCES = listOf(PinType.INT, PinType.FLOAT, PinType.BOOL)
+
+    private fun validTargetsFor(src: PinType) = when (src) {
+        PinType.INT -> listOf(PinType.FLOAT, PinType.BOOL)
+        PinType.FLOAT -> listOf(PinType.INT)
+        PinType.BOOL -> listOf(PinType.INT)
+        else -> emptyList()
+    }
 }

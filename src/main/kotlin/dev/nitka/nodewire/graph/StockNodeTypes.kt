@@ -225,29 +225,20 @@ object StockNodeTypes {
 
     // --- Conversion ----------------------------------------------------
 
-    val INT_TO_FLOAT = nodeType(
-        id = "int_to_float", displayName = "Int → Float", category = NodeCategory.CONVERSION,
-        inputs = listOf(Pin("in", "Int", PinType.INT)),
-        outputs = listOf(Pin("out", "Float", PinType.FLOAT)),
-        evaluate = StockEvaluators.IntToFloat,
-    )
-    val FLOAT_TO_INT = nodeType(
-        id = "float_to_int", displayName = "Float → Int", category = NodeCategory.CONVERSION,
-        inputs = listOf(Pin("in", "Float", PinType.FLOAT)),
-        outputs = listOf(Pin("out", "Int", PinType.INT)),
-        evaluate = StockEvaluators.FloatToInt,
-    )
-    val BOOL_TO_INT = nodeType(
-        id = "bool_to_int", displayName = "Bool → Int", category = NodeCategory.CONVERSION,
-        inputs = listOf(Pin("in", "Bool", PinType.BOOL)),
-        outputs = listOf(Pin("out", "Int", PinType.INT)),
-        evaluate = StockEvaluators.BoolToInt,
-    )
-    val INT_TO_BOOL = nodeType(
-        id = "int_to_bool", displayName = "Int → Bool", category = NodeCategory.CONVERSION,
-        inputs = listOf(Pin("in", "Int", PinType.INT)),
-        outputs = listOf(Pin("out", "Bool", PinType.BOOL)),
-        evaluate = StockEvaluators.IntToBool,
+    val CONVERT = nodeType(
+        id = "convert",
+        displayName = "Convert",
+        category = NodeCategory.CONVERSION,
+        inputs = listOf(Pin("in", "In", PinType.INT)),
+        outputs = listOf(Pin("out", "Out", PinType.FLOAT)),
+        defaultConfig = {
+            CompoundTag().apply {
+                putString("sourceType", PinType.INT.name)
+                putString("targetType", PinType.FLOAT.name)
+            }
+        },
+        configContent = dev.nitka.nodewire.client.screen.NodeConfigContent.Convert,
+        evaluate = StockEvaluators.Convert,
     )
 
     // --- Flow ----------------------------------------------------------
@@ -343,7 +334,7 @@ object StockNodeTypes {
             NEG_FLOAT, ABS_FLOAT, MIN_FLOAT, MAX_FLOAT, CLAMP_FLOAT,
             COMPARE,
             // Conversion
-            INT_TO_FLOAT, FLOAT_TO_INT, BOOL_TO_INT, INT_TO_BOOL, CONVERT_TO_REDSTONE, FROM_REDSTONE,
+            CONVERT, CONVERT_TO_REDSTONE, FROM_REDSTONE,
             // Flow
             SELECT_BOOL, EDGE_RISING, TOGGLE, COUNTER, DELAY,
             // Test / Generators

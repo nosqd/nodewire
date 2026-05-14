@@ -338,6 +338,28 @@ class EditorState(val graph: NodeGraph, val pos: net.minecraft.core.BlockPos = n
         disconnectAllEdges(id)
     }
 
+    /**
+     * Convert node: rebuild input pin to [source] type and output pin to
+     * [target] type, write both config keys, and disconnect all edges because
+     * both pin types may have changed.
+     */
+    fun changeConvertTypes(
+        id: NodeId,
+        source: dev.nitka.nodewire.graph.PinType,
+        target: dev.nitka.nodewire.graph.PinType,
+    ) {
+        updateNode(id) { n ->
+            val inputs = listOf(dev.nitka.nodewire.graph.Pin("in", "In", source))
+            val outputs = listOf(dev.nitka.nodewire.graph.Pin("out", "Out", target))
+            val newConfig = n.config.copy().apply {
+                putString("sourceType", source.name)
+                putString("targetType", target.name)
+            }
+            n.copy(inputs = inputs, outputs = outputs, config = newConfig)
+        }
+        disconnectAllEdges(id)
+    }
+
     private fun disconnectAllEdges(id: dev.nitka.nodewire.graph.NodeId) {
         val before = graph.edges.size
         graph.edges.removeAll { it.from.node == id || it.to.node == id }

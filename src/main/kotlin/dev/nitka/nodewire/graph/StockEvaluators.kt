@@ -156,17 +156,28 @@ object StockEvaluators {
 
     // --- Conversion ----------------------------------------------------
 
-    val IntToFloat: NodeEvaluator = { _, i ->
-        mapOf("out" to PinValue.Float(intIn(i, "in").toFloat()))
-    }
-    val FloatToInt: NodeEvaluator = { _, i ->
-        mapOf("out" to PinValue.Int(floatIn(i, "in").toInt()))
-    }
-    val BoolToInt: NodeEvaluator = { _, i ->
-        mapOf("out" to PinValue.Int(if (boolIn(i, "in")) 1 else 0))
-    }
-    val IntToBool: NodeEvaluator = { _, i ->
-        mapOf("out" to PinValue.Bool(intIn(i, "in") != 0))
+    /**
+     * Convert: collapses INT_TO_FLOAT, FLOAT_TO_INT, BOOL_TO_INT, INT_TO_BOOL
+     * into a single node driven by `config.sourceType` + `config.targetType`.
+     * Valid pairs: INT↔FLOAT, INT↔BOOL (BOOL↔FLOAT is excluded).
+     * Cast semantics match the original evaluators exactly:
+     *   INT→FLOAT  : toFloat()
+     *   FLOAT→INT  : toInt() (truncates toward zero)
+     *   BOOL→INT   : true→1, false→0
+     *   INT→BOOL   : x != 0
+     * Unknown pair → PinValue.default for targetType.
+     */
+    val Convert: NodeEvaluator = { config, inputs ->
+        val src = config.getString("sourceType").ifEmpty { "INT" }
+        val tgt = config.getString("targetType").ifEmpty { "FLOAT" }
+        val out: PinValue = when (src to tgt) {
+            "INT" to "FLOAT" -> PinValue.Float(intIn(inputs, "in").toFloat())
+            "FLOAT" to "INT" -> PinValue.Int(floatIn(inputs, "in").toInt())
+            "BOOL" to "INT" -> PinValue.Int(if (boolIn(inputs, "in")) 1 else 0)
+            "INT" to "BOOL" -> PinValue.Bool(intIn(inputs, "in") != 0)
+            else -> PinValue.default(PinType.fromName(tgt))
+        }
+        mapOf("out" to out)
     }
 
     /**

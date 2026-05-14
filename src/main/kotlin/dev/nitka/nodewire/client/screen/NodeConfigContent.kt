@@ -125,6 +125,58 @@ object NodeConfigContent {
         }
     }
 
+    /** PROBABILITY: integer 0..100 percent. Used by Random Bool. */
+    val Probability: @Composable (Node) -> Unit = { node ->
+        val editor = LocalEditorState.current
+        var text by remember(node.id) { mutableStateOf(node.config.getInt("probability").toString()) }
+        LabeledRow("Chance %") {
+            TextInput(
+                modifier = Modifier.fillMaxWidth(),
+                value = text,
+                onValueChange = { new ->
+                    val filtered = new.filter { it.isDigit() }
+                    text = filtered
+                    val v = (filtered.toIntOrNull() ?: 0).coerceIn(0, 100)
+                    node.config.putInt("probability", v)
+                    editor?.bumpGraphVersion()
+                },
+            )
+        }
+    }
+
+    /** RANDOM_INT: min/max integer range. */
+    val IntRange: @Composable (Node) -> Unit = { node ->
+        val editor = LocalEditorState.current
+        var minText by remember(node.id) { mutableStateOf(node.config.getInt("min").toString()) }
+        var maxText by remember(node.id) { mutableStateOf(node.config.getInt("max").toString()) }
+        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space2)) {
+            LabeledRow("Min") {
+                TextInput(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = minText,
+                    onValueChange = { new ->
+                        val filtered = new.filterIndexed { i, c -> c.isDigit() || (c == '-' && i == 0) }
+                        minText = filtered
+                        node.config.putInt("min", filtered.toIntOrNull() ?: 0)
+                        editor?.bumpGraphVersion()
+                    },
+                )
+            }
+            LabeledRow("Max") {
+                TextInput(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = maxText,
+                    onValueChange = { new ->
+                        val filtered = new.filterIndexed { i, c -> c.isDigit() || (c == '-' && i == 0) }
+                        maxText = filtered
+                        node.config.putInt("max", filtered.toIntOrNull() ?: 0)
+                        editor?.bumpGraphVersion()
+                    },
+                )
+            }
+        }
+    }
+
     /** TIMER: integer period in ticks. */
     val TimerPeriod: @Composable (Node) -> Unit = { node ->
         val editor = LocalEditorState.current

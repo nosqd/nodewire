@@ -4,6 +4,7 @@ import dev.nitka.nodewire.block.LogicBlockEntity
 import dev.nitka.nodewire.client.screen.ChannelPickerScreen
 import dev.nitka.nodewire.graph.PinType
 import dev.nitka.nodewire.net.BindChannelPacket
+import dev.nitka.nodewire.net.BindSideChannelPacket
 import dev.nitka.nodewire.net.NodewireNetwork
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
@@ -49,36 +50,84 @@ class ChannelLinkToolItem(props: Properties) : Item(props) {
         val player = ctx.player ?: return InteractionResult.PASS
         val pos = ctx.clickedPos
         val be = level.getBlockEntity(pos) as? LogicBlockEntity
-            ?: return InteractionResult.PASS
 
-        // All UX is client-side; server-side just consumes the click.
-        if (level.isClientSide) {
-            if (player.isShiftKeyDown) openSourcePicker(stack, be)
-            else openTargetPicker(stack, be)
+        if (be != null) {
+            // Logic block: source-set / target-pick UX as before.
+            if (level.isClientSide) {
+                if (player.isShiftKeyDown) openSourcePicker(stack, be)
+                else openTargetPicker(stack, be)
+            }
+            return InteractionResult.sidedSuccess(level.isClientSide)
+        }
+
+        // Non-logic target — only valid as the "target" of an already-set
+        // source. Shift+RMB here does nothing (no source to set on this
+        // kind of block).
+        if (level.isClientSide && !player.isShiftKeyDown) {
+            handleNonLogicTarget(stack, ctx)
         }
         return InteractionResult.sidedSuccess(level.isClientSide)
     }
 
-    private fun openSourcePicker(stack: ItemStack, be: LogicBlockEntity) {
-        val mc = Minecraft.getInstance()
-        val options = be.graph.nodes.values
-            .filter { it.typeKey.path == "channel_output" }
-            .mapNotNull { node ->
-                val name = node.config.getString("name")
-                if (name.isEmpty()) return@mapNotNull null
-                val type = PinType.fromName(node.config.getString("type"))
-                ChannelPickerScreen.Option(name, type)
-            }
-        if (options.isEmpty()) {
-            actionBar("No named channel outputs on this block.", true)
+    /**
+     * Right-click on a non-logic block face. If a source channel is set in
+     * the stack and is redstone-coercible (BOOL / INT / REDSTONE), send a
+     * BindSideChannelPacket binding `source.channel → target face`. The
+     * target face is `ctx.clickedFace` — the face the player aimed at.
+     *
+     * Adjacency: the target must sit directly adjacent to the source on
+     * the opposite of [clickedFace]. We validate client-side for fast user
+     * feedback; the server re-validates.
+     */
+    private fun handleNonLogicTarget(stack: ItemStack, ctx: UseOnContext) {
+        val tag = stack.tag
+        if (tag == null || !tag.contains(NBT_SOURCE_POS) || !tag.contains(NBT_SOURCE_NAME)) {
+            actionBar("Pick a source first: Shift + right-click a logic block", true)
             return
         }
+        val sourcePos = NbtUtils.readBlockPos(tag.getCompound(NBT_SOURCE_POS))
+        val sourceName = tag.getString(NBT_SOURCE_NAME)
+        val mc = Minecraft.getInstance()
+        val sourceBe = mc.level?.getBlockEntity(sourcePos) as? LogicBlockEntity
+        if (sourceBe == null) {
+            actionBar("Source block no longer exists", true)
+            return
+        }
+        val sourceNode = sourceBe.graph.nodes.values.firstOrNull {
+            it.typeKey.path == "channel_output" && it.config.getString("name") == sourceName
+        }
+        if (sourceNode == null) {
+            actionBar("Source channel '$sourceName' no longer exists", true)
+            return
+        }
+        val sourceType = PinType.fromName(sourceNode.config.getString("type"))
+        if (sourceType != PinType.BOOL && sourceType != PinType.INT && sourceType != PinType.REDSTONE) {
+            actionBar("Channel type ${sourceType.name.lowercase()} can't drive a redstone side", true)
+            return
+        }
+        val targetPos = ctx.clickedPos
+        val targetSide = ctx.clickedFace
+        // No adjacency requirement — virtual signals travel via VirtualSignalMap
+        // surfaced through a Level mixin, so the source can be anywhere.
+        NodewireNetwork.CHANNEL.sendToServer(
+            BindSideChannelPacket(sourcePos, sourceName, targetPos, targetSide),
+        )
+        actionBar(
+            "Bound ${sourcePos.toShortString()}/$sourceName → ${targetPos.toShortString()} ${targetSide.name.lowercase()}",
+            false,
+        )
+    }
+
+    private fun openSourcePicker(stack: ItemStack, be: LogicBlockEntity) {
+        val mc = Minecraft.getInstance()
         val srcPos = be.blockPos
-        mc.setScreen(ChannelPickerScreen("Source channel", options) { picked ->
-            stack.orCreateTag.put(NBT_SOURCE_POS, NbtUtils.writeBlockPos(srcPos))
-            stack.orCreateTag.putString(NBT_SOURCE_NAME, picked)
-            actionBar("Source: ${srcPos.toShortString()} / $picked", false)
-        })
+        mc.setScreen(
+            dev.nitka.nodewire.client.screen.BindingsManagerScreen(be) { picked ->
+                stack.orCreateTag.put(NBT_SOURCE_POS, NbtUtils.writeBlockPos(srcPos))
+                stack.orCreateTag.putString(NBT_SOURCE_NAME, picked)
+                actionBar("Source: ${srcPos.toShortString()} / $picked", false)
+            },
+        )
     }
 
     private fun openTargetPicker(stack: ItemStack, be: LogicBlockEntity) {

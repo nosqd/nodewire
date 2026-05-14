@@ -49,6 +49,13 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
     private val bindings: MutableList<ChannelBinding> = mutableListOf()
 
     /**
+     * Drive-by-wire links from this BE's channels to a face of an
+     * arbitrary adjacent block. Applied as a redstone signal on this
+     * block's face pointing at the target.
+     */
+    private val sideBindings: MutableList<SideBinding> = mutableListOf()
+
+    /**
      * Values pushed in from other BEs' [ChannelOutput] nodes via their
      * bindings. Keyed by THIS BE's channel-input name. Read at the start
      * of each tick into the evaluator's externalOutputs map.
@@ -104,6 +111,95 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
     }
 
     fun bindingsSnapshot(): List<ChannelBinding> = bindings.toList()
+    fun sideBindingsSnapshot(): List<SideBinding> = sideBindings.toList()
+
+    /**
+     * Delete one channel-binding tuple. Returns true if a matching entry
+     * was removed. The block is marked dirty + a client update is pushed
+     * by the caller on success.
+     */
+    fun removeBinding(
+        sourceChannelName: String,
+        targetPos: BlockPos,
+        targetChannelName: String,
+    ): Boolean {
+        val removed = bindings.removeAll {
+            it.sourceChannelName == sourceChannelName
+                && it.targetPos == targetPos
+                && it.targetChannelName == targetChannelName
+        }
+        if (removed) setChanged()
+        return removed
+    }
+
+    /**
+     * Delete one side-binding tuple. Returns true on success. Also clears
+     * the corresponding entry from the per-level VirtualSignalMap so the
+     * target sees signal go to 0 before the next tick rewrites the map.
+     */
+    fun removeSideBinding(
+        sourceChannelName: String,
+        targetPos: BlockPos,
+        targetSide: Direction,
+    ): Boolean {
+        val removed = sideBindings.removeAll {
+            it.sourceChannelName == sourceChannelName
+                && it.targetPos == targetPos
+                && it.targetSide == targetSide
+        }
+        if (removed) {
+            setChanged()
+            // Pre-empt the next-tick rewrite: clear our contribution now
+            // so the target neighbour-update we fire next sees 0.
+            level?.let { dev.nitka.nodewire.signal.VirtualSignalMap.of(it).put(blockPos, targetPos, targetSide, 0) }
+            level?.let {
+                val tgt = it.getBlockState(targetPos)
+                if (!tgt.isAir) {
+                    it.neighborChanged(targetPos, tgt.block, targetPos)
+                    it.updateNeighborsAt(targetPos, tgt.block)
+                }
+            }
+        }
+        return removed
+    }
+
+    /**
+     * Drive-by-wire bind: this BE's [sourceChannelName] → [targetPos]'s
+     * [targetSide] face. Returns true if accepted, false on validation:
+     *   * source channel must exist on this BE
+     *   * source channel type must be coercible to redstone (BOOL/INT/REDSTONE)
+     *   * target must be directly adjacent on `targetSide.opposite`
+     *
+     * Duplicates (same source channel + target pos + side) are replaced
+     * to keep one binding per slot.
+     */
+    fun addSideBinding(
+        sourceChannelName: String,
+        targetPos: BlockPos,
+        targetSide: Direction,
+    ): Boolean {
+        if (sourceChannelName.isEmpty()) return false
+        val srcNode = graph.nodes.values.firstOrNull {
+            it.typeKey.path == "channel_output"
+                && it.config.getString("name") == sourceChannelName
+        } ?: return false
+        val srcType = PinType.fromName(srcNode.config.getString("type"))
+        if (srcType != PinType.BOOL && srcType != PinType.INT && srcType != PinType.REDSTONE) {
+            return false
+        }
+        // No adjacency requirement — virtual signals are injected via
+        // VirtualSignalMap + a mixin into Level.getBestNeighborSignal, so
+        // the target can be arbitrarily far from the source.
+
+        sideBindings.removeAll {
+            it.sourceChannelName == sourceChannelName
+                && it.targetPos == targetPos
+                && it.targetSide == targetSide
+        }
+        sideBindings.add(SideBinding(sourceChannelName, targetPos, targetSide))
+        setChanged()
+        return true
+    }
 
     fun serverTick(level: Level, pos: BlockPos, state: BlockState) {
         val eval = serverEvaluator ?: StatefulGraphEvaluator(graph).also { serverEvaluator = it }
@@ -143,14 +239,68 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
 
         val result = eval.tick(external)
 
-        // 2a. Output redstone per face.
+        // 2a. Output redstone per face — driven purely by side_output nodes.
+        // Drive-by-wire side bindings go through VirtualSignalMap below, not
+        // through faceOutputs, since they target arbitrary positions.
         val updated = HashMap<Direction, Int>()
         for (node in graph.nodes.values) {
             if (node.typeKey.path != "side_output") continue
             val face = directionOf(node.config.getString("face")) ?: continue
             val edge = graph.edges.firstOrNull { it.to.node == node.id && it.to.pin == "in" }
             val value = edge?.let { result.valueAt(it.from.node, it.from.pin) }
-            updated[face] = redstoneOf(value)
+            val r = redstoneOf(value)
+            updated[face] = maxOf(updated[face] ?: 0, r)
+        }
+        // Prune stale side-bindings (target moved away, channel gone) and
+        // apply live ones as redstone on our face toward the target.
+        if (sideBindings.isNotEmpty()) {
+            val before = sideBindings.size
+            sideBindings.removeAll { isSideStale(it, level) }
+            if (sideBindings.size != before) {
+                setChanged()
+                level.sendBlockUpdated(pos, state, state, net.minecraft.world.level.block.Block.UPDATE_CLIENTS)
+            }
+        }
+        // Compute per-channel value once for both bindings + sideBindings.
+        val perChannelValueCache by lazy {
+            val map = HashMap<String, PinValue>()
+            for (node in graph.nodes.values) {
+                if (node.typeKey.path != "channel_output") continue
+                val name = node.config.getString("name")
+                if (name.isEmpty()) continue
+                val edge = graph.edges.firstOrNull { it.to.node == node.id && it.to.pin == "in" }
+                val value = edge?.let { result.valueAt(it.from.node, it.from.pin) } ?: continue
+                map[name] = value
+            }
+            map
+        }
+        // Side bindings: inject into the per-level virtual signal map. The
+        // mixin into Level.getBestNeighborSignal will surface these to any
+        // block that polls its neighbours — distance and adjacency are
+        // irrelevant. We collect per (targetPos, targetSide) and take the
+        // max if multiple sources drive the same slot.
+        if (sideBindings.isNotEmpty()) {
+            val map = dev.nitka.nodewire.signal.VirtualSignalMap.of(level)
+            // Remove any previous contributions from this source first so a
+            // dropped binding clears its signal in the same tick.
+            map.clearSource(pos)
+            for (sb in sideBindings) {
+                val value = perChannelValueCache[sb.sourceChannelName] ?: continue
+                val r = redstoneOf(value)
+                map.put(pos, sb.targetPos, sb.targetSide, r)
+            }
+            // Schedule a neighbour update on each affected target so it
+            // re-polls its power state; without this most blocks won't
+            // notice until something else perturbs them.
+            for (sb in sideBindings) {
+                val targetState = level.getBlockState(sb.targetPos)
+                if (!targetState.isAir) {
+                    level.neighborChanged(sb.targetPos, targetState.block, sb.targetPos)
+                    // Also poke updateNeighborsAt so block entities that
+                    // chain (e.g. piston extensions) see the change.
+                    level.updateNeighborsAt(sb.targetPos, targetState.block)
+                }
+            }
         }
         if (updated != faceOutputs) {
             faceOutputs = updated
@@ -162,17 +312,8 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
         // grab its incoming value and push to any target BE bound on this
         // channel name.
         if (bindings.isNotEmpty()) {
-            val perChannelValue = HashMap<String, PinValue>()
-            for (node in graph.nodes.values) {
-                if (node.typeKey.path != "channel_output") continue
-                val name = node.config.getString("name")
-                if (name.isEmpty()) continue
-                val edge = graph.edges.firstOrNull { it.to.node == node.id && it.to.pin == "in" }
-                val value = edge?.let { result.valueAt(it.from.node, it.from.pin) } ?: continue
-                perChannelValue[name] = value
-            }
             for (binding in bindings) {
-                val value = perChannelValue[binding.sourceChannelName] ?: continue
+                val value = perChannelValueCache[binding.sourceChannelName] ?: continue
                 val target = level.getBlockEntity(binding.targetPos) as? LogicBlockEntity ?: continue
                 // Key by target's input name — they may differ from the
                 // source channel's name. The target reads this slot on its
@@ -192,6 +333,24 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
     override fun setRemoved() {
         if (level?.isClientSide == true) {
             dev.nitka.nodewire.client.wire.ClientLogicBlockTracker.unregister(this)
+        } else {
+            val lvl = level
+            if (lvl != null) {
+                // Drop any virtual signals we were injecting so targets
+                // immediately stop seeing power on the next poll.
+                dev.nitka.nodewire.signal.VirtualSignalMap.of(lvl).clearSource(blockPos)
+                // Plus poke every target so it actually re-polls — without
+                // this, a piston/lamp/etc. that was held high by our signal
+                // would stay high indefinitely (vanilla only re-reads on
+                // neighbour-change events, not on a passive value drop).
+                for (sb in sideBindings) {
+                    val tgt = lvl.getBlockState(sb.targetPos)
+                    if (!tgt.isAir) {
+                        lvl.neighborChanged(sb.targetPos, tgt.block, sb.targetPos)
+                        lvl.updateNeighborsAt(sb.targetPos, tgt.block)
+                    }
+                }
+            }
         }
         super.setRemoved()
     }
@@ -212,6 +371,14 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
                     .orElseThrow { IllegalStateException("bindings encode failed") },
             )
         }
+        if (sideBindings.isNotEmpty()) {
+            tag.put(
+                "side_bindings",
+                SideBinding.CODEC.listOf()
+                    .encodeStart(NbtOps.INSTANCE, sideBindings.toList()).result()
+                    .orElseThrow { IllegalStateException("side_bindings encode failed") },
+            )
+        }
     }
 
     override fun load(tag: CompoundTag) {
@@ -230,6 +397,13 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
                 .orElse(emptyList())
             bindings.addAll(list)
         }
+        sideBindings.clear()
+        if (tag.contains("side_bindings")) {
+            val list = SideBinding.CODEC.listOf()
+                .parse(NbtOps.INSTANCE, tag.get("side_bindings")).result()
+                .orElse(emptyList())
+            sideBindings.addAll(list)
+        }
         invalidateEvaluator()
     }
 
@@ -240,6 +414,25 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
 
     override fun onDataPacket(net: Connection, pkt: ClientboundBlockEntityDataPacket) {
         pkt.tag?.let { load(it) }
+    }
+
+    private fun isSideStale(sb: SideBinding, level: Level): Boolean {
+        // Source channel must still exist on this BE.
+        val srcNode = graph.nodes.values.firstOrNull {
+            it.typeKey.path == "channel_output"
+                && it.config.getString("name") == sb.sourceChannelName
+        } ?: return true
+        val srcType = PinType.fromName(srcNode.config.getString("type"))
+        if (srcType != PinType.BOOL && srcType != PinType.INT && srcType != PinType.REDSTONE) {
+            return true
+        }
+        // Target must still be a non-air block. Distance is fine — the
+        // signal travels via VirtualSignalMap, not via vanilla neighbour
+        // chain. Unloaded chunks are tolerated: we just stop emitting until
+        // they reload (don't prune, would surprise the user).
+        val state = level.getBlockState(sb.targetPos)
+        if (state.isAir) return true
+        return false
     }
 
     private fun isStale(binding: ChannelBinding, level: Level): Boolean {

@@ -26,7 +26,8 @@ class StockNodeTypesTest {
     fun stockTypesRegistered() {
         // After round-3: BLOCK_INPUT/OUTPUT removed, SIDE_IN/OUT +
         // CHANNEL_IN/OUT + CONVERT_TO_REDSTONE added (-2 +5 = +3).
-        assertEquals(44, NodeTypeRegistry.all().size)
+        // Test/generator round adds RANDOM_BOOL, RANDOM_INT, PULSE (+3).
+        assertEquals(47, NodeTypeRegistry.all().size)
     }
 
     @Test

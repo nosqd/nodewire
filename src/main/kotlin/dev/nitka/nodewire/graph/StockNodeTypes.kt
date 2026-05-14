@@ -354,6 +354,39 @@ object StockNodeTypes {
         tickEvaluator = StockEvaluators.DelayTick,
     )
 
+    // --- Test / Generators --------------------------------------------
+
+    val RANDOM_BOOL = nodeType(
+        id = "random_bool",
+        displayName = "Random Bool",
+        category = NodeCategory.CONSTANTS,
+        outputs = listOf(Pin("out", "Value", PinType.BOOL)),
+        defaultConfig = { CompoundTag().apply { putInt("probability", 50) } },
+        configContent = dev.nitka.nodewire.client.screen.NodeConfigContent.Probability,
+        evaluate = StockEvaluators.RandomBool,
+    )
+
+    val RANDOM_INT = nodeType(
+        id = "random_int",
+        displayName = "Random Int",
+        category = NodeCategory.CONSTANTS,
+        outputs = listOf(Pin("out", "Value", PinType.INT)),
+        defaultConfig = { CompoundTag().apply { putInt("min", 0); putInt("max", 15) } },
+        configContent = dev.nitka.nodewire.client.screen.NodeConfigContent.IntRange,
+        evaluate = StockEvaluators.RandomInt,
+    )
+
+    val PULSE = nodeType(
+        id = "pulse",
+        displayName = "Pulse",
+        category = NodeCategory.CONSTANTS,
+        outputs = listOf(Pin("out", "Pulse", PinType.BOOL)),
+        defaultConfig = { CompoundTag().apply { putInt("period", 20) } },
+        configContent = dev.nitka.nodewire.client.screen.NodeConfigContent.TimerPeriod,
+        evaluate = StockEvaluators.Pulse,
+        tickEvaluator = StockEvaluators.PulseTick,
+    )
+
     /** Registers every stock type into [NodeTypeRegistry]. Idempotent. */
     fun registerAll() {
         listOf(
@@ -374,6 +407,8 @@ object StockNodeTypes {
             INT_TO_FLOAT, FLOAT_TO_INT, BOOL_TO_INT, INT_TO_BOOL, CONVERT_TO_REDSTONE,
             // Flow
             SELECT_BOOL, EDGE_RISING, TOGGLE, COUNTER, DELAY,
+            // Test / Generators
+            RANDOM_BOOL, RANDOM_INT, PULSE,
         ).forEach(NodeTypeRegistry::register)
     }
 

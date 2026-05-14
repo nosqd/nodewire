@@ -80,6 +80,20 @@ legacyForge {
     }
 }
 
+// Mixin support — legacyForge plugin exposes a top-level `mixin` block that
+// (a) tells Forge's Mixin loader about our config and (b) wires the refmap
+// generation/remap step into the build. The refmap is what maps source
+// Mojang names (used in our Java mixin) to SRG names baked into the runtime
+// MC jar.
+mixin {
+    config("nodewire.mixins.json")
+    // Wires the Mixin annotation processor for the `main` source set —
+    // ModDevGradle plumbs the right tsrg path into the AP automatically
+    // and writes the refmap to `nodewire.refmap.json`, then remaps it to
+    // SRG at jar time.
+    add(sourceSets["main"], "nodewire.refmap.json")
+}
+
 // KFF bundles kotlin-stdlib at runtime. We must NOT let any other dep pull it onto
 // the classpath again, or modlauncher complains about duplicate module exports.
 // ModDev isolates the mod's JPMS module from KFF's module — compose-runtime and
@@ -127,6 +141,15 @@ dependencies {
     modRuntimeOnly("dev.engine-room.flywheel:flywheel-forge-1.20.1:1.0.5")
     modImplementation("com.tterrag.registrate:Registrate:MC1.20-1.3.3")
     implementation("io.github.llamalad7:mixinextras-forge:0.4.1")
+    // mixinextras-forge ships as a thin JarInJar wrapper — its classes (the
+    // @ModifyReturnValue / @WrapOperation / etc. annotations) live in
+    // mixinextras-common, which we need on the compile classpath explicitly.
+    compileOnly("io.github.llamalad7:mixinextras-common:0.4.1")
+    annotationProcessor("io.github.llamalad7:mixinextras-common:0.4.1")
+    // Mixin annotation processor — generates the refmap entries the legacyForge
+    // plugin then remaps to SRG names at jar time. Without this, our @Mixin
+    // class would silently fail to apply in production.
+    annotationProcessor("org.spongepowered:mixin:0.8.5:processor")
 
     // JEI — recipe viewer (compile API + runtime impl)
     modCompileOnly("mezz.jei:jei-1.20.1-forge-api:15.20.0.129")

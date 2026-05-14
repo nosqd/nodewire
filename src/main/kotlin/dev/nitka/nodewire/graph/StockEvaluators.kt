@@ -352,6 +352,46 @@ object StockEvaluators {
 
     private const val MAX_DELAY = 200
 
+    // --- Test / generators ---------------------------------------------
+
+    /**
+     * Random Bool: each tick emits `true` with probability `config.probability/100`.
+     * Stateless because the evaluator is the only deterministic-vs-not source —
+     * we don't keep state between ticks. Random instance is per-thread.
+     */
+    val RandomBool: NodeEvaluator = { config, _ ->
+        val pct = config.getInt("probability").coerceIn(0, 100)
+        mapOf("out" to PinValue.Bool(java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < pct))
+    }
+
+    /**
+     * Random Int: each evaluation emits a uniform int in [min, max] inclusive.
+     * If min > max, swaps for sanity.
+     */
+    val RandomInt: NodeEvaluator = { config, _ ->
+        var lo = config.getInt("min")
+        var hi = config.getInt("max")
+        if (hi < lo) { val t = lo; lo = hi; hi = t }
+        val v = lo + java.util.concurrent.ThreadLocalRandom.current().nextInt(hi - lo + 1)
+        mapOf("out" to PinValue.Int(v))
+    }
+
+    /**
+     * Pulse: fires `true` for exactly one tick every `config.period` ticks,
+     * `false` the rest of the time. Different from Timer which is a square
+     * wave (50% duty). Useful as a clock tick into Counter for "every N
+     * ticks bump the count".
+     */
+    val PulseTick: TickEvaluator = { state, config, _ ->
+        val period = config.getInt("period").coerceAtLeast(1)
+        var counter = state.getInt("counter") + 1
+        val fire = counter >= period
+        if (fire) counter = 0
+        state.putInt("counter", counter)
+        mapOf("out" to PinValue.Bool(fire))
+    }
+    val Pulse: NodeEvaluator = { _, _ -> mapOf("out" to PinValue.Bool(false)) }
+
     // --- helpers --------------------------------------------------------
 
     private fun boolIn(inputs: Map<String, PinValue>, pin: String): Boolean =

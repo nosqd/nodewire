@@ -343,6 +343,59 @@ object NodeConfigContent {
         }
     }
 
+    /**
+     * FromRedstone: target type + mode pickers. Mirror of [ConvertToRedstone]
+     * for the inverse direction. The output pin rebuilds via
+     * [EditorState.changeFromRedstoneOutput] which also snips outgoing edges.
+     */
+    val FromRedstone: @Composable (Node) -> Unit = { node ->
+        val editor = LocalEditorState.current
+        var targetType by remember(node.id) {
+            mutableStateOf(PinType.fromName(node.config.getString("targetType").ifEmpty { PinType.INT.name }))
+        }
+        var mode by remember(node.id) {
+            mutableStateOf(node.config.getString("mode").ifEmpty { defaultTargetModeFor(targetType) })
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space2)) {
+            LabeledRow("To") {
+                Select(
+                    options = TARGET_TYPES,
+                    selected = targetType,
+                    onSelect = { next ->
+                        val defaultMode = defaultTargetModeFor(next)
+                        targetType = next
+                        mode = defaultMode
+                        editor?.updateNode(node.id) { n ->
+                            n.copy(config = n.config.copy().apply {
+                                putString("targetType", next.name)
+                                putString("mode", defaultMode)
+                            })
+                        }
+                        editor?.changeFromRedstoneOutput(node.id, next)
+                    },
+                    label = { it.name.lowercase() },
+                )
+            }
+            val modes = modesForTarget(targetType)
+            LabeledRow("Mode") {
+                Select(
+                    options = modes,
+                    selected = mode,
+                    onSelect = { next ->
+                        mode = next
+                        editor?.updateNode(node.id) { n ->
+                            n.copy(config = n.config.copy().apply {
+                                putString("mode", next)
+                            })
+                        }
+                    },
+                    label = { it },
+                )
+            }
+            FromRedstoneModeParams(node, targetType, mode, editor)
+        }
+    }
+
     private val SOURCE_TYPES = listOf(PinType.INT, PinType.FLOAT, PinType.BOOL)
 
     private fun defaultModeFor(t: PinType) = when (t) {
@@ -459,6 +512,38 @@ object NodeConfigContent {
         }
     }
 
+
+    private val TARGET_TYPES = listOf(PinType.INT, PinType.FLOAT, PinType.BOOL)
+
+    private fun defaultTargetModeFor(t: PinType) = when (t) {
+        PinType.INT -> "raw"
+        PinType.FLOAT -> "normalized"
+        PinType.BOOL -> "any"
+        else -> "raw"
+    }
+
+    private fun modesForTarget(t: PinType): List<String> = when (t) {
+        PinType.INT -> listOf("raw", "scaled")
+        PinType.FLOAT -> listOf("normalized", "raw", "scaled")
+        PinType.BOOL -> listOf("any", "threshold")
+        else -> listOf("raw")
+    }
+
+    @Composable
+    private fun FromRedstoneModeParams(node: Node, targetType: PinType, mode: String, editor: EditorState?) {
+        when {
+            targetType == PinType.INT && mode == "scaled" -> {
+                IntField(node, "min", "Min", editor)
+                IntField(node, "max", "Max", editor)
+            }
+            targetType == PinType.FLOAT && mode == "scaled" -> {
+                FloatField(node, "min", "Min", editor)
+                FloatField(node, "max", "Max", editor)
+            }
+            targetType == PinType.BOOL && mode == "threshold" ->
+                IntField(node, "threshold", "Threshold", editor)
+        }
+    }
 
     /** BOOL_CONST: single checkbox bound to `config.value`. */
     val BoolConst: @Composable (Node) -> Unit = { node ->

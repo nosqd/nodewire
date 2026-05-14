@@ -332,6 +332,53 @@ private fun pinColor(type: PinType): Color = when (type) {
 }
 
 /**
+ * Clickable channel-output header. Whole row is the click target — picks
+ * this channel as source and closes the screen. Idle channels (no bindings)
+ * use the surface background; wired channels use surfaceHover so they read
+ * as "active". Hovering deepens to surfacePressed in both cases.
+ */
+@Composable
+private fun GroupHeader(
+    name: String,
+    type: PinType,
+    bindingCount: Int,
+    onPick: () -> Unit,
+) {
+    var hovered by remember { mutableStateOf(false) }
+    val idle = bindingCount == 0
+    val bg = when {
+        hovered -> NwTheme.colors.surfacePressed
+        idle    -> NwTheme.colors.surface
+        else    -> NwTheme.colors.surfaceHover
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bg, NwTheme.shapes.medium)
+            .padding(horizontal = NwTheme.dimens.space6, vertical = NwTheme.dimens.space4)
+            .onHover { hovered = it }
+            .pointerInput { ev, _, _ ->
+                if (ev is PointerEvent.Press) { onPick(); true } else false
+            },
+        verticalAlignment = Alignment.Center,
+        horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space6),
+    ) {
+        Box(modifier = Modifier.size(7).background(pinColor(type), NwTheme.shapes.medium))
+        Text(name, style = NwTheme.typography.caption)
+        Text(
+            type.name.lowercase(),
+            style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+        )
+        Box(modifier = Modifier.weight(1f))
+        Text(
+            if (bindingCount == 0) "no bindings"
+            else "$bindingCount binding${if (bindingCount == 1) "" else "s"}",
+            style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+        )
+    }
+}
+
+/**
  * Single-glyph label for a [Direction] when rendered inside a side-binding
  * target row. UP/DOWN get unicode arrows; cardinal directions use single
  * letters because horizontal arrows on a 2D screen are ambiguous without a

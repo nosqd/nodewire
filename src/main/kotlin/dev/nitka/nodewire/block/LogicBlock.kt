@@ -1,13 +1,17 @@
 package dev.nitka.nodewire.block
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.level.BlockGetter
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.EntityBlock
 import net.minecraft.world.level.block.entity.BlockEntity
+import net.minecraft.world.level.block.entity.BlockEntityTicker
+import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockBehaviour
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.BlockHitResult
@@ -16,17 +20,59 @@ import net.minecraftforge.fml.DistExecutor
 
 /**
  * Block placed in the world that carries a node graph in its
- * [LogicBlockEntity]. Right-click → opens the in-world editor (handled on
- * the client; the server just returns `SUCCESS` to acknowledge).
- *
- * No fancy directional state in MVP — it's a plain isotropic cube. Face-
- * specific I/O is modeled by the `block_input` / `block_output` node
- * types, not by block rotation.
+ * [LogicBlockEntity]. Right-click opens the editor on the client; the
+ * BE ticks on the server, reading neighbour redstone for `side_input`
+ * nodes and emitting on `side_output` faces via [getSignal].
  */
 class LogicBlock(props: BlockBehaviour.Properties) : Block(props), EntityBlock {
 
     override fun newBlockEntity(pos: BlockPos, state: BlockState): BlockEntity =
         LogicBlockEntity(pos, state)
+
+    /**
+     * Server-only ticker that defers to [LogicBlockEntity.serverTick].
+     * Client side returns null — the editor preview runs its own ticking
+     * StatefulGraphEvaluator while the GUI is open.
+     */
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : BlockEntity> getTicker(
+        level: Level,
+        state: BlockState,
+        type: BlockEntityType<T>,
+    ): BlockEntityTicker<T>? {
+        if (level.isClientSide) return null
+        if (type != dev.nitka.nodewire.Registry.LOGIC_BLOCK_BE.get()) return null
+        val ticker = BlockEntityTicker<LogicBlockEntity> { lvl, p, s, be ->
+            be.serverTick(lvl, p, s)
+        }
+        return ticker as BlockEntityTicker<T>
+    }
+
+    /** We can emit redstone on a face. Returning true makes vanilla call [getSignal]. */
+    override fun isSignalSource(state: BlockState): Boolean = true
+
+    /**
+     * Power on the face that the redstone read is querying. `direction` is
+     * the direction the signal is going (= our face that emits). Reads
+     * the BE's cached per-face output map populated by the last tick.
+     */
+    override fun getSignal(
+        state: BlockState,
+        level: BlockGetter,
+        pos: BlockPos,
+        direction: Direction,
+    ): Int {
+        val be = level.getBlockEntity(pos) as? LogicBlockEntity ?: return 0
+        return be.faceOutputs[direction] ?: 0
+    }
+
+    /** Same value for direct (= strong) signal — we don't distinguish for now. */
+    override fun getDirectSignal(
+        state: BlockState,
+        level: BlockGetter,
+        pos: BlockPos,
+        direction: Direction,
+    ): Int = getSignal(state, level, pos, direction)
 
     override fun use(
         state: BlockState,
@@ -36,10 +82,6 @@ class LogicBlock(props: BlockBehaviour.Properties) : Block(props), EntityBlock {
         hand: InteractionHand,
         hit: BlockHitResult,
     ): InteractionResult {
-        // The editor is a pure client-side Screen for MVP — no Menu/Container
-        // because there's no slotted inventory to sync. The server just OKs
-        // the interaction; the client opens the editor and reads its graph
-        // directly from the synced BE.
         if (level.isClientSide) {
             DistExecutor.unsafeRunWhenOn(Dist.CLIENT) {
                 Runnable { dev.nitka.nodewire.client.NodeEditorLauncher.open(pos) }

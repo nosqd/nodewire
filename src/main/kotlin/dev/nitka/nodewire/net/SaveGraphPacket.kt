@@ -61,6 +61,9 @@ class SaveGraphPacket(val pos: BlockPos, val graphTag: CompoundTag) {
                 return@enqueueWork
             }
             be.graph = graph
+            // New graph means the cached server-side evaluator references
+            // stale node references — rebuild on next tick.
+            be.invalidateEvaluator()
             be.setChanged()
             level.sendBlockUpdated(pos, be.blockState, be.blockState, Block.UPDATE_CLIENTS)
         }

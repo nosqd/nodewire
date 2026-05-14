@@ -30,11 +30,7 @@ class RemoveBindingPacket(
     enum class Kind { CHANNEL, SIDE }
 
     fun encode(buf: FriendlyByteBuf) {
-        buf.writeBlockPos(sourcePos)
-        buf.writeUtf(sourceChannelName)
-        buf.writeBlockPos(targetPos)
-        buf.writeEnum(kind)
-        buf.writeUtf(extra)
+        buf.writeCodec(CODEC, this)
     }
 
     fun handle(ctx: Supplier<NetworkEvent.Context>): Boolean {
@@ -70,12 +66,20 @@ class RemoveBindingPacket(
         private val LOG: Logger = LogUtils.getLogger()
         private const val MAX_REACH_SQ = 32.0 * 32.0
 
-        fun decode(buf: FriendlyByteBuf): RemoveBindingPacket = RemoveBindingPacket(
-            sourcePos = buf.readBlockPos(),
-            sourceChannelName = buf.readUtf(),
-            targetPos = buf.readBlockPos(),
-            kind = buf.readEnum(Kind::class.java),
-            extra = buf.readUtf(),
-        )
+        private val KIND_CODEC: com.mojang.serialization.Codec<Kind> =
+            com.mojang.serialization.Codec.STRING.xmap(Kind::valueOf, Kind::name)
+
+        val CODEC: com.mojang.serialization.Codec<RemoveBindingPacket> =
+            com.mojang.serialization.codecs.RecordCodecBuilder.create { i ->
+                i.group(
+                    net.minecraft.core.BlockPos.CODEC.fieldOf("src_pos").forGetter(RemoveBindingPacket::sourcePos),
+                    com.mojang.serialization.Codec.STRING.fieldOf("src_ch").forGetter(RemoveBindingPacket::sourceChannelName),
+                    net.minecraft.core.BlockPos.CODEC.fieldOf("tgt_pos").forGetter(RemoveBindingPacket::targetPos),
+                    KIND_CODEC.fieldOf("kind").forGetter(RemoveBindingPacket::kind),
+                    com.mojang.serialization.Codec.STRING.fieldOf("extra").forGetter(RemoveBindingPacket::extra),
+                ).apply(i, ::RemoveBindingPacket)
+            }
+
+        fun decode(buf: FriendlyByteBuf): RemoveBindingPacket = buf.readCodec(CODEC)
     }
 }

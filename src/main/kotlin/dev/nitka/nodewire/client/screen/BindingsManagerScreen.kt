@@ -5,9 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import dev.nitka.nodewire.block.ChannelBinding
 import dev.nitka.nodewire.block.LogicBlockEntity
-import dev.nitka.nodewire.block.SideBinding
 import dev.nitka.nodewire.graph.PinType
 import dev.nitka.nodewire.net.NodewireNetwork
 import dev.nitka.nodewire.net.RemoveBindingPacket
@@ -39,24 +37,16 @@ import dev.nitka.nodewire.ui.render.Color
 import dev.nitka.nodewire.ui.theme.NwTheme
 import dev.nitka.nodewire.ui.theme.NwThemeProvider
 import net.minecraft.client.Minecraft
-import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
 
 /**
- * Two-section modal opened by Shift + right-click on a logic block with
- * the Channel Link Tool. Replaces the bare "pick channel" picker so the
- * user can also see what's already wired out of this block and remove
- * any link they don't want.
- *
- * Top section — "Source channel": pick one of this BE's named channel
- * outputs to arm the tool with. Same behaviour as the old source picker:
- * selection writes the source into the stack NBT and closes.
- *
- * Bottom section — "Existing bindings": every [ChannelBinding] and
- * [SideBinding] going out of this BE. Each row shows the source channel,
- * an arrow, the target description, and a `×` button. Click removes the
- * binding via [RemoveBindingPacket]; the row vanishes once the server
- * round-trips the chunk update.
+ * Modal opened by Shift + right-click on a logic block with the Channel
+ * Link Tool. One screen, one list: each `channel_output` node on this BE
+ * becomes a group whose header doubles as the source-pick affordance.
+ * Click a header → arm the tool with that channel + close. Click `×` on
+ * an indented target row → send [RemoveBindingPacket] to drop that
+ * specific binding; the screen stays open and recomposes on the next
+ * BE update.
  */
 class BindingsManagerScreen(
     private val sourceBe: LogicBlockEntity,

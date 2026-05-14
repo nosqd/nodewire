@@ -11,6 +11,8 @@ import dev.nitka.nodewire.block.SideBinding
 import dev.nitka.nodewire.graph.PinType
 import dev.nitka.nodewire.net.NodewireNetwork
 import dev.nitka.nodewire.net.RemoveBindingPacket
+import dev.nitka.nodewire.ui.components.Button
+import dev.nitka.nodewire.ui.components.ButtonDefaults
 import dev.nitka.nodewire.ui.components.Surface
 import dev.nitka.nodewire.ui.components.SurfaceStyle
 import dev.nitka.nodewire.ui.components.Text
@@ -164,7 +166,10 @@ class BindingsManagerScreen(
         }
         Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space2)) {
             for (b in bindings) {
-                ChannelBindingRow(b) {
+                TargetRow(
+                    description = "(${b.targetPos.toShortString()}) ${b.targetChannelName}",
+                    kindChip = "ch",
+                ) {
                     NodewireNetwork.CHANNEL.sendToServer(
                         RemoveBindingPacket(
                             sourcePos = sourceBe.blockPos,
@@ -178,7 +183,10 @@ class BindingsManagerScreen(
                 }
             }
             for (sb in sideBindings) {
-                SideBindingRow(sb) {
+                TargetRow(
+                    description = "(${sb.targetPos.toShortString()}) ${sideGlyph(sb.targetSide)}",
+                    kindChip = "side",
+                ) {
                     NodewireNetwork.CHANNEL.sendToServer(
                         RemoveBindingPacket(
                             sourcePos = sourceBe.blockPos,
@@ -227,87 +235,50 @@ private fun SourceRow(name: String, type: PinType, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun ChannelBindingRow(binding: ChannelBinding, onRemove: () -> Unit) {
-    BindingRow(
-        dotType = PinType.BOOL, // channel — neutral pin colour; type lives on the source node config
-        sourceText = binding.sourceChannelName,
-        targetText = "${binding.targetPos.toShortString()}  ${binding.targetChannelName}",
-        kindLabel = "ch",
-        onRemove = onRemove,
-    )
-}
-
-@Composable
-private fun SideBindingRow(binding: SideBinding, onRemove: () -> Unit) {
-    BindingRow(
-        dotType = PinType.REDSTONE,
-        sourceText = binding.sourceChannelName,
-        targetText = "${binding.targetPos.toShortString()}  ${binding.targetSide.name.lowercase()}",
-        kindLabel = "side",
-        onRemove = onRemove,
-    )
-}
 
 /**
- * Two-line row: top = source channel name with a coloured dot, bottom =
- * the target description (block coords + channel-name or side). Layout is
- * Row { Column(weight 1) { ... }; kindLabel; RemoveButton } so the target
- * text wraps within the inner column instead of pushing the × off the row.
+ * One indented row under a [GroupHeader]. Always single-line. The `×` is a
+ * real [Button] with the danger preset, so hover/pressed states match the
+ * rest of the UI.
  */
 @Composable
-private fun BindingRow(
-    dotType: PinType,
-    sourceText: String,
-    targetText: String,
-    kindLabel: String,
-    onRemove: () -> Unit,
-) {
-    var hovered by remember { mutableStateOf(false) }
-    val bg = if (hovered) NwTheme.colors.surfaceHover else NwTheme.colors.surface
+private fun TargetRow(description: String, kindChip: String, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(bg, NwTheme.shapes.medium)
-            .padding(horizontal = NwTheme.dimens.space6, vertical = NwTheme.dimens.space4)
-            .onHover { hovered = it },
+            .padding(
+                start = NwTheme.dimens.space16,
+                end = NwTheme.dimens.space2,
+                top = NwTheme.dimens.space2,
+                bottom = NwTheme.dimens.space2,
+            ),
         verticalAlignment = Alignment.Center,
         horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space6),
     ) {
-        Box(modifier = Modifier.size(6).background(pinColor(dotType), NwTheme.shapes.medium))
-        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space2)) {
-            Text(sourceText, style = NwTheme.typography.caption)
+        Text(
+            "→",
+            style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+        )
+        Text(description, style = NwTheme.typography.caption)
+        Box(modifier = Modifier.weight(1f))
+        Box(
+            modifier = Modifier
+                .background(NwTheme.colors.surfacePressed, NwTheme.shapes.medium)
+                .padding(horizontal = NwTheme.dimens.space4, vertical = NwTheme.dimens.space2),
+        ) {
             Text(
-                "→ $targetText",
+                kindChip,
                 style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
             )
         }
-        // Push the kind chip + delete button to the right edge of the row.
-        Box(modifier = Modifier.weight(1f))
-        Text(
-            kindLabel,
-            style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
-        )
-        RemoveButton(onRemove)
-    }
-}
-
-@Composable
-private fun RemoveButton(onClick: () -> Unit) {
-    var hovered by remember { mutableStateOf(false) }
-    val bg = if (hovered) NwTheme.colors.danger else NwTheme.colors.surfacePressed
-    Row(
-        modifier = Modifier
-            .size(18)
-            .background(bg, NwTheme.shapes.medium)
-            .onHover { hovered = it }
-            .pointerInput { ev, _, _ ->
-                if (ev is PointerEvent.Press) { onClick(); true } else false
-            },
-        verticalAlignment = Alignment.Center,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Text("×", style = NwTheme.typography.caption)
+        Button(
+            onClick = onRemove,
+            style = ButtonDefaults.danger().copy(
+                padding = PaddingValues(horizontal = NwTheme.dimens.space6, vertical = NwTheme.dimens.space2),
+            ),
+        ) {
+            Text("×", style = NwTheme.typography.caption)
+        }
     }
 }
 

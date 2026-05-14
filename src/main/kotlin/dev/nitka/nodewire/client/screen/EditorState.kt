@@ -241,6 +241,20 @@ class EditorState(val graph: NodeGraph, val pos: net.minecraft.core.BlockPos = n
         disconnectAllEdges(id)
     }
 
+    /**
+     * From-Redstone has a single output pin whose type follows
+     * `config.targetType`. Rebuild the pin and snip incompatible edges.
+     */
+    fun changeFromRedstoneOutput(
+        id: dev.nitka.nodewire.graph.NodeId,
+        newType: dev.nitka.nodewire.graph.PinType,
+    ) {
+        updateNode(id) { n ->
+            n.copy(outputs = listOf(n.outputs.first().copy(type = newType)))
+        }
+        disconnectAllEdges(id)
+    }
+
     private fun disconnectAllEdges(id: dev.nitka.nodewire.graph.NodeId) {
         val before = graph.edges.size
         graph.edges.removeAll { it.from.node == id || it.to.node == id }

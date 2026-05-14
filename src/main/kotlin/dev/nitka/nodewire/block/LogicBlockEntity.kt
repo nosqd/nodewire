@@ -67,30 +67,41 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
     }
 
     /**
-     * Bind every name-and-type-matching pair of channels between this BE's
-     * outputs and [target]'s inputs. Returns the number of bindings
-     * created. Replaces any prior bindings pointing at [target] to avoid
-     * stale duplicates after a rewire.
+     * Create one explicit channel link: this BE's [sourceChannelName]
+     * (a `channel_output` by that name) → [target]'s [targetChannelName]
+     * (a `channel_input` by that name). Returns true if the binding was
+     * created, false on validation failure (missing nodes / type mismatch /
+     * names blank).
+     *
+     * Replaces any earlier binding from the same source channel name to the
+     * same target so re-picking the same pair doesn't duplicate.
      */
-    fun bindChannelsTo(target: LogicBlockEntity): Int {
-        bindings.removeAll { it.targetPos == target.blockPos }
-        var count = 0
-        for (src in graph.nodes.values) {
-            if (src.typeKey.path != "channel_output") continue
-            val srcName = src.config.getString("name")
-            if (srcName.isEmpty()) continue
-            val srcType = PinType.fromName(src.config.getString("type"))
-            val match = target.graph.nodes.values.firstOrNull { tgt ->
-                tgt.typeKey.path == "channel_input"
-                    && tgt.config.getString("name") == srcName
-                    && PinType.fromName(tgt.config.getString("type")) == srcType
-            } ?: continue
-            bindings.add(ChannelBinding(srcName, target.blockPos))
-            count++
-            @Suppress("UNUSED_VARIABLE") val unused = match // anchor: ensures we matched
+    fun addBinding(
+        sourceChannelName: String,
+        target: LogicBlockEntity,
+        targetChannelName: String,
+    ): Boolean {
+        if (sourceChannelName.isEmpty() || targetChannelName.isEmpty()) return false
+        val srcNode = graph.nodes.values.firstOrNull {
+            it.typeKey.path == "channel_output"
+                && it.config.getString("name") == sourceChannelName
+        } ?: return false
+        val tgtNode = target.graph.nodes.values.firstOrNull {
+            it.typeKey.path == "channel_input"
+                && it.config.getString("name") == targetChannelName
+        } ?: return false
+        val srcType = PinType.fromName(srcNode.config.getString("type"))
+        val tgtType = PinType.fromName(tgtNode.config.getString("type"))
+        if (srcType != tgtType) return false
+
+        bindings.removeAll {
+            it.sourceChannelName == sourceChannelName
+                && it.targetPos == target.blockPos
+                && it.targetChannelName == targetChannelName
         }
-        if (count > 0) setChanged()
-        return count
+        bindings.add(ChannelBinding(sourceChannelName, target.blockPos, targetChannelName))
+        setChanged()
+        return true
     }
 
     fun bindingsSnapshot(): List<ChannelBinding> = bindings.toList()
@@ -149,7 +160,10 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
             for (binding in bindings) {
                 val value = perChannelValue[binding.sourceChannelName] ?: continue
                 val target = level.getBlockEntity(binding.targetPos) as? LogicBlockEntity ?: continue
-                target.externalChannelInputs[binding.sourceChannelName] = value
+                // Key by target's input name — they may differ from the
+                // source channel's name. The target reads this slot on its
+                // own next tick when it processes channel_input nodes.
+                target.externalChannelInputs[binding.targetChannelName] = value
             }
         }
     }

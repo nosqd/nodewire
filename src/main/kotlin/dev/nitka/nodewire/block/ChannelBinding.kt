@@ -18,15 +18,18 @@ import net.minecraft.nbt.NbtUtils
 data class ChannelBinding(
     val sourceChannelName: String,
     val targetPos: BlockPos,
+    val targetChannelName: String,
 ) {
     fun toNbt(): CompoundTag = CompoundTag().also {
-        it.putString("name", sourceChannelName)
+        it.putString("src", sourceChannelName)
+        it.putString("dst", targetChannelName)
         it.put("pos", NbtUtils.writeBlockPos(targetPos))
     }
 
     companion object {
         fun fromNbt(tag: CompoundTag) = ChannelBinding(
-            sourceChannelName = tag.getString("name"),
+            sourceChannelName = tag.getString("src").ifEmpty { tag.getString("name") },
+            targetChannelName = tag.getString("dst").ifEmpty { tag.getString("name") },
             targetPos = NbtUtils.readBlockPos(tag.getCompound("pos")),
         )
     }

@@ -30,5 +30,10 @@ object NodewireNetwork {
             .decoder(SaveGraphPacket::decode)
             .consumerMainThread(SaveGraphPacket::handle)
             .add()
+        CHANNEL.messageBuilder(BindChannelPacket::class.java, id++)
+            .encoder(BindChannelPacket::encode)
+            .decoder(BindChannelPacket::decode)
+            .consumerMainThread(BindChannelPacket::handle)
+            .add()
     }
 }

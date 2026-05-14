@@ -29,5 +29,13 @@ enum class PinType {
         /** Defensive lookup — falls back to [BOOL] if the saved key is unknown (forward-compat load). */
         fun fromName(name: String): PinType =
             entries.firstOrNull { it.name == name } ?: BOOL
+
+        /**
+         * String codec — encodes as the enum's [name]; decode defends with
+         * [fromName] which falls back to BOOL on unknown values, preserving
+         * the project's forward-compat-load rule.
+         */
+        val CODEC: com.mojang.serialization.Codec<PinType> =
+            com.mojang.serialization.Codec.STRING.xmap(::fromName, PinType::name)
     }
 }

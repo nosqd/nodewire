@@ -146,25 +146,29 @@ class NodeEditorScreen(val pos: BlockPos, initialGraph: NodeGraph) :
                         //     cancel the chain.
                         //   * Non-sticky drags use only press-drag-release
                         //     on the source pin; we never run for them.
-                        .pointerInput { ev, _, _ ->
+                        .pointerInput { ev, localX, localY ->
+                            // Local coords are relative to this Box (canvas
+                            // area). Screen-absolute ev.x/ev.y differs once
+                            // the canvas is offset by the top toolbar, so we
+                            // use local for world-coord math and pass
+                            // screen-absolute only to popup placement.
                             when {
                                 // Right-click on empty area → open the
-                                // "Add Node" context menu. World position
-                                // = screen / zoom - pan (canvas origin 0,0).
+                                // "Add Node" context menu.
                                 ev is PointerEvent.Press
                                     && ev.button == RIGHT_BUTTON
                                     && editor.wireDragSource == null
                                 -> {
-                                    val worldX = ev.x.toFloat() / canvas.zoom - canvas.panX
-                                    val worldY = ev.y.toFloat() / canvas.zoom - canvas.panY
+                                    val worldX = localX.toFloat() / canvas.zoom - canvas.panX
+                                    val worldY = localY.toFloat() / canvas.zoom - canvas.panY
                                     editor.openCreateMenu(ev.x, ev.y, CanvasPos(worldX, worldY))
                                     true
                                 }
                                 // Sticky wire drag handling — unchanged.
                                 editor.wireDragSource != null && editor.wireDragSticky -> when (ev) {
                                     is PointerEvent.Move -> {
-                                        val worldX = ev.x.toFloat() / canvas.zoom - canvas.panX
-                                        val worldY = ev.y.toFloat() / canvas.zoom - canvas.panY
+                                        val worldX = localX.toFloat() / canvas.zoom - canvas.panX
+                                        val worldY = localY.toFloat() / canvas.zoom - canvas.panY
                                         editor.setCursor(worldX, worldY)
                                         false
                                     }
@@ -182,8 +186,8 @@ class NodeEditorScreen(val pos: BlockPos, initialGraph: NodeGraph) :
                                 ev is PointerEvent.Press
                                     && ev.button == LEFT_BUTTON
                                 -> {
-                                    val worldX = ev.x.toFloat() / canvas.zoom - canvas.panX
-                                    val worldY = ev.y.toFloat() / canvas.zoom - canvas.panY
+                                    val worldX = localX.toFloat() / canvas.zoom - canvas.panX
+                                    val worldY = localY.toFloat() / canvas.zoom - canvas.panY
                                     editor.beginSelectionDrag(worldX, worldY)
                                     true
                                 }
@@ -191,8 +195,8 @@ class NodeEditorScreen(val pos: BlockPos, initialGraph: NodeGraph) :
                                     && ev.button == LEFT_BUTTON
                                     && editor.selectionDragStart != null
                                 -> {
-                                    val worldX = ev.x.toFloat() / canvas.zoom - canvas.panX
-                                    val worldY = ev.y.toFloat() / canvas.zoom - canvas.panY
+                                    val worldX = localX.toFloat() / canvas.zoom - canvas.panX
+                                    val worldY = localY.toFloat() / canvas.zoom - canvas.panY
                                     editor.updateSelectionDrag(worldX, worldY)
                                     true
                                 }

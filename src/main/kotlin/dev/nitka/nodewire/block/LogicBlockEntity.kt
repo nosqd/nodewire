@@ -95,23 +95,36 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
      * Replaces any earlier binding from the same source channel name to the
      * same target so re-picking the same pair doesn't duplicate.
      */
-    fun addBinding(
+    /**
+     * Outcome of [tryAddBinding]. Specific enough that the packet handler
+     * can surface the failure reason to the player instead of silently
+     * dropping the bind.
+     */
+    sealed interface BindResult {
+        object Ok : BindResult
+        object EmptyName : BindResult
+        object SourceMissing : BindResult
+        object TargetMissing : BindResult
+        data class TypeMismatch(val srcType: PinType, val tgtType: PinType) : BindResult
+    }
+
+    fun tryAddBinding(
         sourceChannelName: String,
         target: LogicBlockEntity,
         targetChannelName: String,
-    ): Boolean {
-        if (sourceChannelName.isEmpty() || targetChannelName.isEmpty()) return false
+    ): BindResult {
+        if (sourceChannelName.isEmpty() || targetChannelName.isEmpty()) return BindResult.EmptyName
         val srcNode = graph.nodes.values.firstOrNull {
             it.typeKey.path == "channel_output"
                 && it.config.getString("name") == sourceChannelName
-        } ?: return false
+        } ?: return BindResult.SourceMissing
         val tgtNode = target.graph.nodes.values.firstOrNull {
             it.typeKey.path == "channel_input"
                 && it.config.getString("name") == targetChannelName
-        } ?: return false
+        } ?: return BindResult.TargetMissing
         val srcType = PinType.fromName(srcNode.config.getString("type"))
         val tgtType = PinType.fromName(tgtNode.config.getString("type"))
-        if (srcType != tgtType) return false
+        if (srcType != tgtType) return BindResult.TypeMismatch(srcType, tgtType)
 
         bindings.removeAll {
             it.sourceChannelName == sourceChannelName
@@ -120,8 +133,16 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
         }
         bindings.add(ChannelBinding(sourceChannelName, target.blockPos, targetChannelName))
         setChanged()
-        return true
+        return BindResult.Ok
     }
+
+    /** Legacy boolean wrapper. Retained for any caller that doesn't care
+     *  about the reason; new code should use [tryAddBinding]. */
+    fun addBinding(
+        sourceChannelName: String,
+        target: LogicBlockEntity,
+        targetChannelName: String,
+    ): Boolean = tryAddBinding(sourceChannelName, target, targetChannelName) is BindResult.Ok
 
     fun bindingsSnapshot(): List<ChannelBinding> = bindings.toList()
     fun sideBindingsSnapshot(): List<SideBinding> = sideBindings.toList()

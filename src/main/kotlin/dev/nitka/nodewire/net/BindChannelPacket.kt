@@ -35,19 +35,58 @@ class BindChannelPacket(
             val center = sourcePos.center
             if (player.distanceToSqr(center.x, center.y, center.z) > MAX_REACH_SQ) {
                 LOG.warn("Bind rejected: source too far from {}", player.gameProfile.name)
+                notify(player, "Source block is too far away")
                 return@enqueueWork
             }
-            val srcBe = level.getBlockEntity(sourcePos) as? LogicBlockEntity ?: return@enqueueWork
-            val tgtBe = level.getBlockEntity(targetPos) as? LogicBlockEntity ?: return@enqueueWork
-            val ok = srcBe.addBinding(sourceChannelName, tgtBe, targetChannelName)
-            if (ok) {
-                level.sendBlockUpdated(
-                    sourcePos, srcBe.blockState, srcBe.blockState, Block.UPDATE_CLIENTS,
-                )
+            val srcBe = level.getBlockEntity(sourcePos) as? LogicBlockEntity
+            if (srcBe == null) {
+                LOG.warn("Bind rejected: source BE missing at {}", sourcePos)
+                notify(player, "Source block missing at ${sourcePos.toShortString()}")
+                return@enqueueWork
+            }
+            val tgtBe = level.getBlockEntity(targetPos) as? LogicBlockEntity
+            if (tgtBe == null) {
+                LOG.warn("Bind rejected: target BE missing at {}", targetPos)
+                notify(player, "Target block missing at ${targetPos.toShortString()}")
+                return@enqueueWork
+            }
+            when (val res = srcBe.tryAddBinding(sourceChannelName, tgtBe, targetChannelName)) {
+                LogicBlockEntity.BindResult.Ok -> {
+                    level.sendBlockUpdated(
+                        sourcePos, srcBe.blockState, srcBe.blockState, Block.UPDATE_CLIENTS,
+                    )
+                }
+                LogicBlockEntity.BindResult.EmptyName -> {
+                    LOG.warn("Bind rejected: empty channel name (src='{}' tgt='{}')", sourceChannelName, targetChannelName)
+                    notify(player, "Channel name is empty — give your Channel Output/Input a name")
+                }
+                LogicBlockEntity.BindResult.SourceMissing -> {
+                    LOG.warn("Bind rejected: src '{}' has no Channel Output named '{}'", sourcePos, sourceChannelName)
+                    notify(player, "Source block has no Channel Output named '$sourceChannelName' (close the editor to save first)")
+                }
+                LogicBlockEntity.BindResult.TargetMissing -> {
+                    LOG.warn("Bind rejected: tgt '{}' has no Channel Input named '{}'", targetPos, targetChannelName)
+                    notify(player, "Target block has no Channel Input named '$targetChannelName' (close the editor to save first)")
+                }
+                is LogicBlockEntity.BindResult.TypeMismatch -> {
+                    LOG.warn(
+                        "Bind rejected: type mismatch {} vs {} (src='{}' tgt='{}')",
+                        res.srcType, res.tgtType, sourceChannelName, targetChannelName,
+                    )
+                    notify(player, "Type mismatch: ${res.srcType.name.lowercase()} → ${res.tgtType.name.lowercase()}")
+                }
             }
         }
         c.packetHandled = true
         return true
+    }
+
+    private fun notify(player: net.minecraft.server.level.ServerPlayer, msg: String) {
+        player.displayClientMessage(
+            net.minecraft.network.chat.Component.literal("Bind failed: $msg")
+                .withStyle(net.minecraft.ChatFormatting.YELLOW),
+            true,
+        )
     }
 
     companion object {

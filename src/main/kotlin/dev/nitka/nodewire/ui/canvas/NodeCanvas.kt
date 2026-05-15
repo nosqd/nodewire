@@ -5,6 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import dev.nitka.nodewire.ui.core.Modifier
 import dev.nitka.nodewire.ui.layout.Layout
+import dev.nitka.nodewire.ui.modifier.input.onPositioned
 import dev.nitka.nodewire.ui.render.SurfaceRenderer
 
 /**
@@ -41,7 +42,9 @@ fun NodeCanvas(
     content: @Composable () -> Unit,
 ) {
     Layout(
-        modifier = modifier.nodeCanvas(state),
+        modifier = modifier
+            .nodeCanvas(state)
+            .onPositioned { c -> state.setOrigin(c.screenX, c.screenY) },
         renderer = SurfaceRenderer,
     ) {
         CompositionLocalProvider(LocalCanvasState provides state) {

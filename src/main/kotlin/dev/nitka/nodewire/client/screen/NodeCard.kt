@@ -326,11 +326,19 @@ private fun PinHandle(
             .size(PIN_HANDLE_SIZE)
             .background(pinColor(pin.type), NwTheme.shapes.medium)
             .border(BorderStroke(1, NwTheme.colors.borderStrong), NwTheme.shapes.medium)
-            // onPositioned fires every layout pass — coords are in
-            // world space inside a NodeCanvas (postLayoutWalk sums
-            // `layoutX/layoutY` which Yoga keeps pan/zoom-free).
+            // onPositioned fires every layout pass — coords arrive in
+            // root-relative screen-space (postLayoutWalk sums `layoutX/Y`
+            // from the UI root). Subtract the canvas's own origin so the
+            // value lives in canvas-local "world" coords, the space the
+            // WireLayer pose expects.
             .onPositioned { coords ->
-                editor?.pinPositions?.set(key, coords.centerX.toFloat(), coords.centerY.toFloat())
+                val ox = canvas?.originX ?: 0
+                val oy = canvas?.originY ?: 0
+                editor?.pinPositions?.set(
+                    key,
+                    (coords.centerX - ox).toFloat(),
+                    (coords.centerY - oy).toFloat(),
+                )
             }
             .pointerInput { ev, _, _ ->
                 if (editor == null) return@pointerInput false

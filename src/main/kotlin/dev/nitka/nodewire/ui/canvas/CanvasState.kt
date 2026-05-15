@@ -33,9 +33,25 @@ class CanvasState(
     private var _panY by mutableStateOf(initialPanY)
     private var _zoom by mutableStateOf(initialZoom.coerceIn(MIN_ZOOM, MAX_ZOOM))
 
+    // The canvas's own top-left in screen-space (Yoga accumulator). Children
+    // that report their geometry via `onPositioned` get coords relative to
+    // the UI tree root, not relative to the canvas, so anything that needs
+    // canvas-local "world" coords (e.g. pin positions feeding into wire
+    // rendering) must subtract these. Updated each frame from NodeCanvas's
+    // own onPositioned callback.
+    private var _originX by mutableStateOf(0)
+    private var _originY by mutableStateOf(0)
+
     val panX: Float get() = _panX
     val panY: Float get() = _panY
     val zoom: Float get() = _zoom
+    val originX: Int get() = _originX
+    val originY: Int get() = _originY
+
+    fun setOrigin(x: Int, y: Int) {
+        _originX = x
+        _originY = y
+    }
 
     fun panBy(dx: Float, dy: Float) {
         _panX += dx

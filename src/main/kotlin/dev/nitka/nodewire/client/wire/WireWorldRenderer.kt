@@ -129,18 +129,21 @@ object WireWorldRenderer {
         for (rb in bindList) {
             val srcKey = rb.source.blockPos.asLong()
             val dstKey = rb.binding.target.payload.blockPos.asLong()
-            val src = fanOffset(rb.source.blockPos.center, rb.srcIdx, outTotal[srcKey]!!)
-            val dst = fanOffset(rb.binding.target.payload.blockPos.center, rb.dstIdx, inTotal[dstKey]!!)
+            val srcCenter = sourceWorldCenter(rb.source, level) ?: continue
+            val dstCenter = rb.binding.target.worldCenter(level) ?: continue
+            val src = fanOffset(srcCenter, rb.srcIdx, outTotal[srcKey]!!)
+            val dst = fanOffset(dstCenter, rb.dstIdx, inTotal[dstKey]!!)
             val color = colorForBinding(rb.source, rb.binding.sourceChannelName)
             drawStraightWire(builder, matrix, src, dst, cameraPos, color)
         }
         for (sb in sideList) {
             val srcKey = sb.source.blockPos.asLong()
-            val src = fanOffset(sb.source.blockPos.center, sb.srcIdx, outTotal[srcKey]!!)
+            val srcCenter = sourceWorldCenter(sb.source, level) ?: continue
+            val tCenter = sb.binding.target.worldCenter(level) ?: continue
+            val src = fanOffset(srcCenter, sb.srcIdx, outTotal[srcKey]!!)
             // Target end of the wire = the centre of the bound face on
-            // the target block. That's target.payload.blockPos.center pushed half a
-            // block in the targetSide direction.
-            val tCenter = sb.binding.target.payload.blockPos.center
+            // the target block. That's tCenter pushed half a block in the
+            // targetSide direction.
             val n = sb.binding.targetSide.normal
             val dst = Vec3(
                 tCenter.x + n.x * 0.5,
@@ -149,7 +152,7 @@ object WireWorldRenderer {
             )
             val color = colorForBinding(sb.source, sb.binding.sourceChannelName)
             drawStraightWire(builder, matrix, src, dst, cameraPos, color)
-            drawFaceFrame(builder, matrix, sb.binding.target.payload.blockPos, sb.binding.targetSide, color)
+            drawFaceFrame(builder, matrix, dst, sb.binding.targetSide, color)
         }
         pose.popPose()
         bufferSource.endBatch(WIRE_TYPE)
@@ -160,10 +163,30 @@ object WireWorldRenderer {
      * a 1‑pixel‑style frame highlighting that this side of the target is
      * being driven. Y/X/Z normal axes each get a matching local frame.
      */
+    /**
+     * Resolves the world-space centre of a [LogicBlockEntity]'s position via
+     * [EndpointRef.from] + [EndpointRef.worldCenter]. Returns null when the
+     * BE's position cannot be resolved (e.g. its ship is unloaded), causing
+     * the caller to skip that wire silently.
+     */
+    private fun sourceWorldCenter(
+        be: dev.nitka.nodewire.block.LogicBlockEntity,
+        level: net.minecraft.world.level.Level,
+    ): net.minecraft.world.phys.Vec3? {
+        val ref = dev.nitka.nodewire.endpoint.EndpointRef.from(level, be.blockPos)
+        return ref.worldCenter(level)
+    }
+
+    /**
+     * [faceCenter] is the pre-resolved world-space centre of the block face
+     * (i.e. block world centre + normal * 0.5). The outset is applied here
+     * so the frame sits just above the block surface regardless of whether
+     * the block lives on a ship or in the world.
+     */
     private fun drawFaceFrame(
         builder: com.mojang.blaze3d.vertex.VertexConsumer,
         matrix: Matrix4f,
-        pos: net.minecraft.core.BlockPos,
+        faceCenter: net.minecraft.world.phys.Vec3,
         face: net.minecraft.core.Direction,
         color: Int,
     ) {
@@ -171,14 +194,11 @@ object WireWorldRenderer {
         // with the block texture.
         val outset = 0.005
         val thick = FRAME_THICKNESS
-        val cx = pos.x + 0.5
-        val cy = pos.y + 0.5
-        val cz = pos.z + 0.5
         val n = face.normal
-        // Centre of the face plane.
-        val fx = cx + n.x * (0.5 + outset)
-        val fy = cy + n.y * (0.5 + outset)
-        val fz = cz + n.z * (0.5 + outset)
+        // Centre of the face plane, outset slightly.
+        val fx = faceCenter.x + n.x * outset
+        val fy = faceCenter.y + n.y * outset
+        val fz = faceCenter.z + n.z * outset
         // Tangent basis on the face plane: pick u/v as two world axes that
         // aren't the face normal.
         val basis = faceBasis(face)

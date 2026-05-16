@@ -139,15 +139,15 @@ class BindingsManagerScreen(
                                     }
                                     for (b in myChannelBindings) {
                                         TargetRow(
-                                            description = "(${b.targetPos.toShortString()}) ${b.targetChannelName}",
+                                            description = "(${b.target.payload.blockPos.toShortString()}) ${b.targetChannelName}",
                                             kindChip = "ch",
-                                            targetPos = b.targetPos,
+                                            targetPos = b.target.payload.blockPos,
                                             onRemove = {
                                                 NodewireNetwork.CHANNEL.sendToServer(
                                                     RemoveBindingPacket(
                                                         sourcePos = sourceBe.blockPos,
                                                         sourceChannelName = b.sourceChannelName,
-                                                        targetPos = b.targetPos,
+                                                        targetPos = b.target.payload.blockPos,
                                                         kind = RemoveBindingPacket.Kind.CHANNEL,
                                                         extra = b.targetChannelName,
                                                     ),

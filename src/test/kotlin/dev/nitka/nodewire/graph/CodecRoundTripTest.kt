@@ -1,13 +1,24 @@
 package dev.nitka.nodewire.graph
 
 import com.mojang.serialization.Codec
+import dev.nitka.nodewire.endpoint.EndpointBackends
+import dev.nitka.nodewire.endpoint.EndpointRef
+import dev.nitka.nodewire.endpoint.WorldBackend
+import dev.nitka.nodewire.endpoint.WorldPayload
+import net.minecraft.core.BlockPos
 import net.minecraft.nbt.NbtOps
 import net.minecraft.nbt.NbtUtils
 import net.minecraft.nbt.TagParser
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 class CodecRoundTripTest {
+
+    @BeforeEach fun resetBackends() {
+        EndpointBackends.clearForTests()
+        EndpointBackends.register(WorldBackend)
+    }
 
     /** Encode → decode through NbtOps. Asserts result equals input. */
     private fun <T> roundTripNbt(codec: Codec<T>, value: T) {
@@ -245,7 +256,7 @@ class CodecRoundTripTest {
         dev.nitka.nodewire.block.ChannelBinding.CODEC,
         dev.nitka.nodewire.block.ChannelBinding(
             sourceChannelName = "speed",
-            targetPos = net.minecraft.core.BlockPos(1, 2, 3),
+            target = EndpointRef(WorldBackend.id, WorldPayload(BlockPos(1, 2, 3))),
             targetChannelName = "thrust",
         ),
     )
@@ -254,7 +265,7 @@ class CodecRoundTripTest {
         dev.nitka.nodewire.block.ChannelBinding.CODEC,
         dev.nitka.nodewire.block.ChannelBinding(
             sourceChannelName = "x",
-            targetPos = net.minecraft.core.BlockPos(-1, -2, -3),
+            target = EndpointRef(WorldBackend.id, WorldPayload(BlockPos(-1, -2, -3))),
             targetChannelName = "y",
         ),
     )

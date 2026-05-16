@@ -81,7 +81,7 @@ object WireWorldRenderer {
             if (bindings.isEmpty()) continue
             for (b in bindings) {
                 val srcKey = source.blockPos.asLong()
-                val dstKey = b.targetPos.asLong()
+                val dstKey = b.target.payload.blockPos.asLong()
                 val srcIdx = outCount[srcKey] ?: 0
                 val dstIdx = inCount[dstKey] ?: 0
                 outCount[srcKey] = srcIdx + 1
@@ -111,7 +111,7 @@ object WireWorldRenderer {
         val inTotal = HashMap<Long, Int>()
         for (rb in bindList) {
             outTotal.merge(rb.source.blockPos.asLong(), 1, Int::plus)
-            inTotal.merge(rb.binding.targetPos.asLong(), 1, Int::plus)
+            inTotal.merge(rb.binding.target.payload.blockPos.asLong(), 1, Int::plus)
         }
         for (sb in sideList) {
             outTotal.merge(sb.source.blockPos.asLong(), 1, Int::plus)
@@ -128,9 +128,9 @@ object WireWorldRenderer {
 
         for (rb in bindList) {
             val srcKey = rb.source.blockPos.asLong()
-            val dstKey = rb.binding.targetPos.asLong()
+            val dstKey = rb.binding.target.payload.blockPos.asLong()
             val src = fanOffset(rb.source.blockPos.center, rb.srcIdx, outTotal[srcKey]!!)
-            val dst = fanOffset(rb.binding.targetPos.center, rb.dstIdx, inTotal[dstKey]!!)
+            val dst = fanOffset(rb.binding.target.payload.blockPos.center, rb.dstIdx, inTotal[dstKey]!!)
             val color = colorForBinding(rb.source, rb.binding.sourceChannelName)
             drawStraightWire(builder, matrix, src, dst, cameraPos, color)
         }

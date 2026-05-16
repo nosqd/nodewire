@@ -1,6 +1,7 @@
 package dev.nitka.nodewire.block
 
 import dev.nitka.nodewire.Registry
+import dev.nitka.nodewire.endpoint.EndpointRef
 import dev.nitka.nodewire.graph.NodeGraph
 import dev.nitka.nodewire.graph.PinType
 import dev.nitka.nodewire.graph.PinValue
@@ -128,10 +129,10 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
 
         bindings.removeAll {
             it.sourceChannelName == sourceChannelName
-                && it.targetPos == target.blockPos
+                && it.target.payload.blockPos == target.blockPos
                 && it.targetChannelName == targetChannelName
         }
-        bindings.add(ChannelBinding(sourceChannelName, target.blockPos, targetChannelName))
+        bindings.add(ChannelBinding(sourceChannelName, EndpointRef.from(level!!, target.blockPos), targetChannelName))
         setChanged()
         return BindResult.Ok
     }
@@ -159,7 +160,7 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
     ): Boolean {
         val removed = bindings.removeAll {
             it.sourceChannelName == sourceChannelName
-                && it.targetPos == targetPos
+                && it.target.payload.blockPos == targetPos
                 && it.targetChannelName == targetChannelName
         }
         if (removed) setChanged()
@@ -368,7 +369,7 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
         if (bindings.isNotEmpty()) {
             for (binding in bindings) {
                 val value = perChannelValueCache[binding.sourceChannelName] ?: continue
-                val target = level.getBlockEntity(binding.targetPos) as? LogicBlockEntity ?: continue
+                val target = binding.target.resolve(level) as? LogicBlockEntity ?: continue
                 // Key by target's input name — they may differ from the
                 // source channel's name. The target reads this slot on its
                 // own next tick when it processes channel_input nodes.
@@ -498,7 +499,7 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
             it.typeKey.path == "channel_output"
                 && it.config.getString("name") == binding.sourceChannelName
         } ?: return true
-        val target = level.getBlockEntity(binding.targetPos) as? LogicBlockEntity ?: return true
+        val target = binding.target.resolve(level) as? LogicBlockEntity ?: return true
         val tgtNode = target.graph.nodes.values.firstOrNull {
             it.typeKey.path == "channel_input"
                 && it.config.getString("name") == binding.targetChannelName

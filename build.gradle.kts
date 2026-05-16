@@ -131,12 +131,13 @@ dependencies {
 
     // Valkyrien Skies 2 — physics & ship API.
     // `modImplementation` auto-remaps SRG → Mojang names via ModDevGradle.
-    modImplementation("org.valkyrienskies:valkyrienskies-120-forge:2.4.13+a436e86a70")
+    modImplementation("org.valkyrienskies:valkyrienskies-120-forge:2.4.10+a7a0898ae1")
     // VS API classes (org.valkyrienskies.core.api.*) live in these split modules.
     // The forge jar marks them runtime-only; pulled in as compileOnly so direct
-    // VS API imports resolve at compile time.
-    compileOnly("org.valkyrienskies.core:internal:1.1.0+0565eeb8a4")
-    compileOnly("org.valkyrienskies.core:util:1.1.0+0565eeb8a4")
+    // VS API imports resolve at compile time. Version must match the forge jar's
+    // POM-declared core deps (see VS 2.4.10's pom: core 1.1.0+1d4a7373e9).
+    compileOnly("org.valkyrienskies.core:internal:1.1.0+1d4a7373e9")
+    compileOnly("org.valkyrienskies.core:util:1.1.0+1d4a7373e9")
 
     // Create 6.0.8 + transitive deps (per Create wiki's official dev recipe).
     // :slim excludes nested JarInJar mods so we control their versions explicitly.

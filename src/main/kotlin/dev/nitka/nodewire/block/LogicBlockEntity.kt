@@ -17,6 +17,7 @@ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraftforge.fml.ModList
 
 /**
  * Stores the editable [NodeGraph] for one logic block, drives per-tick
@@ -77,6 +78,14 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
     private val externalChannelInputs: MutableMap<String, PinValue> = mutableMapOf()
 
     private var serverEvaluator: StatefulGraphEvaluator? = null
+
+    /**
+     * Per-node Create redstone-link adapters (both input AND output). Transient
+     * — rebuilt on demand each server tick; cleared in [setRemoved] so we don't
+     * leave dead linkables in Create's network handler. Key = node UUID.
+     */
+    private val linkables: MutableMap<java.util.UUID, dev.nitka.nodewire.integration.create.CreateRedstoneLink.NodeLinkable> =
+        mutableMapOf()
 
     /** Last computed redstone power per face. Empty until first server tick. */
     var faceOutputs: Map<Direction, Int> = emptyMap()
@@ -258,6 +267,53 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
         l.sendBlockUpdated(blockPos, blockState, blockState, 3)
     }
 
+    /**
+     * Ensure each redstone_link_input/output node in the graph has a registered
+     * NodeLinkable on Create's network handler. Reconfigures on freq change,
+     * updates lastTransmit for output nodes, prunes orphans whose node was
+     * deleted by the user. Reads lastReceived for input nodes are done in
+     * the caller's external-input collection (Step 3 in serverTick).
+     */
+    private fun syncRedstoneLinkables(level: Level, result: dev.nitka.nodewire.graph.EvalResult) {
+        val CR = dev.nitka.nodewire.integration.create.CreateRedstoneLink
+        val seen = HashSet<java.util.UUID>()
+        for (node in graph.nodes.values) {
+            val listening = when (node.typeKey.path) {
+                "redstone_link_input" -> true
+                "redstone_link_output" -> false
+                else -> continue
+            }
+            seen.add(node.id)
+            val desiredFreq = CR.frequencyOf(node.config)
+            val existing = linkables[node.id]
+            val linkable = if (existing == null) {
+                val l = dev.nitka.nodewire.integration.create.CreateRedstoneLink.NodeLinkable(this, desiredFreq, listening)
+                linkables[node.id] = l
+                CR.register(level, l)
+                l
+            } else if (existing.freq != desiredFreq) {
+                CR.unregister(level, existing)
+                existing.freq = desiredFreq
+                CR.register(level, existing)
+                existing
+            } else {
+                existing
+            }
+            if (!listening) {
+                // Output: pull incoming edge value, update transmit.
+                val edge = graph.edges.firstOrNull { it.to.node == node.id && it.to.pin == "in" }
+                val value = edge?.let { result.valueAt(it.from.node, it.from.pin) }
+                linkable.lastTransmit = redstoneOf(value)
+                CR.updateNetworkOf(level, linkable)
+            }
+        }
+        // Drop orphans (user deleted the node).
+        val orphans = linkables.keys - seen
+        for (id in orphans) {
+            linkables.remove(id)?.let { CR.unregister(level, it) }
+        }
+    }
+
     fun serverTick(level: Level, pos: BlockPos, state: BlockState) {
         val eval = serverEvaluator ?: StatefulGraphEvaluator(graph).also { serverEvaluator = it }
 
@@ -291,10 +347,18 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
                     val value = externalChannelInputs[name] ?: continue
                     external[node.id to "out"] = value
                 }
+                "redstone_link_input" -> {
+                    val linkable = linkables[node.id] ?: continue
+                    external[node.id to "out"] = PinValue.Redstone(linkable.lastReceived)
+                }
             }
         }
 
         val result = eval.tick(external)
+
+        if (ModList.get().isLoaded("create")) {
+            syncRedstoneLinkables(level, result)
+        }
 
         // 2a. Output redstone per face — driven purely by side_output nodes.
         // Drive-by-wire side bindings go through VirtualSignalMap below, not
@@ -406,6 +470,11 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
                         lvl.neighborChanged(sb.target.payload.blockPos, tgt.block, sb.target.payload.blockPos)
                         lvl.updateNeighborsAt(sb.target.payload.blockPos, tgt.block)
                     }
+                }
+                if (ModList.get().isLoaded("create")) {
+                    val CR = dev.nitka.nodewire.integration.create.CreateRedstoneLink
+                    for ((_, l) in linkables) CR.unregister(lvl, l)
+                    linkables.clear()
                 }
             }
         }

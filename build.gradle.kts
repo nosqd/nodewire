@@ -172,7 +172,10 @@ dependencies {
     modCompileOnly("mezz.jei:jei-1.20.1-common-api:15.20.0.129")
     modRuntimeOnly("mezz.jei:jei-1.20.1-forge:15.20.0.129")
 
-    // EMI — alternative recipe viewer for testing
+    // EMI — alternative recipe viewer. compileOnly + runtimeOnly = we get
+    // the API at compile time (for our EMI plugin) without forcing EMI onto
+    // production users; ModDev unpacks both into the dev launch classpath.
+    modCompileOnly("dev.emi:emi-forge:1.1.22+1.20.1")
     modRuntimeOnly("dev.emi:emi-forge:1.1.22+1.20.1")
 
     // --- Compose UI framework ---

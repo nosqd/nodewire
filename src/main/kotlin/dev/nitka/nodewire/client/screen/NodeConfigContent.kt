@@ -400,6 +400,15 @@ object NodeConfigContent {
         }
     }
 
+    /** Constant (VEC2 slot): two float fields writing to `config.x2/y2`. */
+    @Composable
+    private fun ConstantBodyVec2(node: Node, editor: EditorState?) {
+        Column(verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space2)) {
+            FloatField(node, "x2", "X", editor)
+            FloatField(node, "y2", "Y", editor)
+        }
+    }
+
     /** Constant (VEC3 slot): three float fields writing to `config.x/y/z`. */
     @Composable
     private fun ConstantBodyVec3(node: Node, editor: EditorState?) {
@@ -436,6 +445,7 @@ object NodeConfigContent {
                 PinType.INT -> ConstantBodyInt(node, editor)
                 PinType.FLOAT -> ConstantBodyFloat(node, editor)
                 PinType.STRING -> ConstantBodyString(node, editor)
+                PinType.VEC2 -> ConstantBodyVec2(node, editor)
                 PinType.VEC3 -> ConstantBodyVec3(node, editor)
                 else -> Unit
             }
@@ -443,7 +453,8 @@ object NodeConfigContent {
     }
 
     private val CONSTANT_TYPES = listOf(
-        PinType.BOOL, PinType.INT, PinType.FLOAT, PinType.STRING, PinType.VEC3,
+        PinType.BOOL, PinType.INT, PinType.FLOAT, PinType.STRING,
+        PinType.VEC2, PinType.VEC3,
     )
 
     /**

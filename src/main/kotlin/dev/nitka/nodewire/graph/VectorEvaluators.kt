@@ -138,6 +138,35 @@ object VectorEvaluators {
                 val a = vec3In(inputs, "a"); val b = vec3In(inputs, "b")
                 PinValue.Vec3(maxOf(a.x, b.x), maxOf(a.y, b.y), maxOf(a.z, b.z))
             }
+            VecOpType.NEGATE -> if (v2) {
+                val a = vec2In(inputs, "v")
+                PinValue.Vec2(-a.x, -a.y)
+            } else {
+                val a = vec3In(inputs, "v")
+                PinValue.Vec3(-a.x, -a.y, -a.z)
+            }
+            VecOpType.ABS -> if (v2) {
+                val a = vec2In(inputs, "v")
+                PinValue.Vec2(kotlin.math.abs(a.x), kotlin.math.abs(a.y))
+            } else {
+                val a = vec3In(inputs, "v")
+                PinValue.Vec3(
+                    kotlin.math.abs(a.x),
+                    kotlin.math.abs(a.y),
+                    kotlin.math.abs(a.z),
+                )
+            }
+            VecOpType.NORMALIZE -> if (v2) {
+                val a = vec2In(inputs, "v")
+                val len = kotlin.math.sqrt(a.x * a.x + a.y * a.y)
+                if (len == 0f) PinValue.Vec2(0f, 0f)
+                else PinValue.Vec2(a.x / len, a.y / len)
+            } else {
+                val a = vec3In(inputs, "v")
+                val len = kotlin.math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z)
+                if (len == 0f) PinValue.Vec3(0f, 0f, 0f)
+                else PinValue.Vec3(a.x / len, a.y / len, a.z / len)
+            }
             null -> if (v2) PinValue.Vec2(0f, 0f) else PinValue.Vec3(0f, 0f, 0f)
             else -> if (v2) PinValue.Vec2(0f, 0f) else PinValue.Vec3(0f, 0f, 0f)
         }

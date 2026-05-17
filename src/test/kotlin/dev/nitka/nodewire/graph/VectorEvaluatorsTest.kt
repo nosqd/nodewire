@@ -171,4 +171,46 @@ class VectorEvaluatorsTest {
         )
         assertEquals(PinValue.Vec3(4f, 5f, 9f), out["out"])
     }
+
+    @Test fun vecOpNegateVec2() {
+        val out = VectorEvaluators.VecOp(
+            opCfg("NEGATE", "VEC2"),
+            mapOf("v" to PinValue.Vec2(2f, -3f)),
+        )
+        assertEquals(PinValue.Vec2(-2f, 3f), out["out"])
+    }
+
+    @Test fun vecOpNegateVec3() {
+        val out = VectorEvaluators.VecOp(
+            opCfg("NEGATE", "VEC3"),
+            mapOf("v" to PinValue.Vec3(1f, -2f, 3f)),
+        )
+        assertEquals(PinValue.Vec3(-1f, 2f, -3f), out["out"])
+    }
+
+    @Test fun vecOpAbsVec2() {
+        val out = VectorEvaluators.VecOp(
+            opCfg("ABS", "VEC2"),
+            mapOf("v" to PinValue.Vec2(-2f, 3f)),
+        )
+        assertEquals(PinValue.Vec2(2f, 3f), out["out"])
+    }
+
+    @Test fun vecOpNormalizeVec2Unit() {
+        val out = VectorEvaluators.VecOp(
+            opCfg("NORMALIZE", "VEC2"),
+            mapOf("v" to PinValue.Vec2(3f, 4f)),
+        )
+        val v = out["out"] as PinValue.Vec2
+        assertEquals(0.6f, v.x, 0.0001f)
+        assertEquals(0.8f, v.y, 0.0001f)
+    }
+
+    @Test fun vecOpNormalizeZeroStaysZero() {
+        val out = VectorEvaluators.VecOp(
+            opCfg("NORMALIZE", "VEC2"),
+            mapOf("v" to PinValue.Vec2(0f, 0f)),
+        )
+        assertEquals(PinValue.Vec2(0f, 0f), out["out"])
+    }
 }

@@ -13,7 +13,9 @@ import dev.nitka.nodewire.graph.Node
 import dev.nitka.nodewire.graph.NodeGraph
 import dev.nitka.nodewire.graph.NodeId
 import dev.nitka.nodewire.graph.NodeTypeRegistry
+import dev.nitka.nodewire.graph.Pin
 import dev.nitka.nodewire.graph.PinRef
+import dev.nitka.nodewire.graph.PinType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -496,6 +498,132 @@ class EditorState(val graph: NodeGraph, val pos: net.minecraft.core.BlockPos = n
         dev.nitka.nodewire.graph.PinType.REDSTONE to dev.nitka.nodewire.graph.PinType.FLOAT    -> "normalized"
         dev.nitka.nodewire.graph.PinType.REDSTONE to dev.nitka.nodewire.graph.PinType.BOOL     -> "any"
         else -> ""
+    }
+
+    /**
+     * VecOp node: rebuild the input/output pin list from (op, dim) and
+     * write both into config. Dim-locked ops (CROSS=VEC3, ROTATE2D=VEC2,
+     * TO_VEC3 inputs VEC2→VEC3, TO_VEC2 inputs VEC3→VEC2) overwrite
+     * caller's [dim].
+     */
+    fun changeVecOp(
+        id: dev.nitka.nodewire.graph.NodeId,
+        op: String,
+        dim: String,  // "VEC2" / "VEC3"; ignored for locked ops
+    ) {
+        mutateGraph(mergeable = false) {
+            _updateNodeInternal(id) { n ->
+                val (effectiveDim, ins, outs) = pinsForVecOp(op, dim)
+                val newConfig = n.config.copy().apply {
+                    putString("op", op)
+                    putString("dim", effectiveDim)
+                }
+                n.copy(inputs = ins, outputs = outs, config = newConfig)
+            }
+            _disconnectAllEdgesInternal(id)
+        }
+    }
+
+    /**
+     * For a (op, dim), return the canonical (effectiveDim, inputs, outputs)
+     * triple. Op categories:
+     *   * Vec→Vec binary: a, b ∈ V → out:V
+     *   * Vec→Vec unary: v ∈ V → out:V
+     *   * Scalar-mixed: SCALE(v, s), CLAMP_MAG(v, max), LERP(a, b, t)
+     *   * Vec→Vec mixed: PROJECT(a, b), REFLECT(v, n)
+     *   * Reductions: DOT/DISTANCE/ANGLE binary; LENGTH/LENGTH_SQ unary
+     *   * Dim-locked: CROSS=VEC3, ROTATE2D=VEC2
+     *   * Conversions: TO_VEC3 (v:VEC2, z:FLOAT → VEC3), TO_VEC2 (v:VEC3 → VEC2)
+     */
+    private fun pinsForVecOp(
+        op: String,
+        dim: String,
+    ): Triple<String, List<Pin>, List<Pin>> {
+        val effectiveDim = when (op) {
+            "CROSS" -> "VEC3"
+            "ROTATE2D" -> "VEC2"
+            "TO_VEC3", "TO_VEC2" -> dim  // unused at evaluator level
+            else -> if (dim == "VEC3") "VEC3" else "VEC2"
+        }
+        val V = if (effectiveDim == "VEC3") PinType.VEC3 else PinType.VEC2
+        return when (op) {
+            // Binary vec→vec
+            "ADD", "SUB", "MUL_COMPONENT", "MIN", "MAX" -> Triple(
+                effectiveDim,
+                listOf(Pin("a", "A", V), Pin("b", "B", V)),
+                listOf(Pin("out", "Out", V)),
+            )
+            // Unary vec→vec
+            "NEGATE", "NORMALIZE", "ABS" -> Triple(
+                effectiveDim,
+                listOf(Pin("v", "V", V)),
+                listOf(Pin("out", "Out", V)),
+            )
+            "SCALE" -> Triple(
+                effectiveDim,
+                listOf(Pin("v", "V", V), Pin("s", "S", PinType.FLOAT)),
+                listOf(Pin("out", "Out", V)),
+            )
+            "CLAMP_MAG" -> Triple(
+                effectiveDim,
+                listOf(Pin("v", "V", V), Pin("max", "Max", PinType.FLOAT)),
+                listOf(Pin("out", "Out", V)),
+            )
+            "LERP" -> Triple(
+                effectiveDim,
+                listOf(Pin("a", "A", V), Pin("b", "B", V), Pin("t", "T", PinType.FLOAT)),
+                listOf(Pin("out", "Out", V)),
+            )
+            "PROJECT" -> Triple(
+                effectiveDim,
+                listOf(Pin("a", "A", V), Pin("b", "B", V)),
+                listOf(Pin("out", "Out", V)),
+            )
+            "REFLECT" -> Triple(
+                effectiveDim,
+                listOf(Pin("v", "V", V), Pin("n", "N", V)),
+                listOf(Pin("out", "Out", V)),
+            )
+            // Reductions → FLOAT out
+            "DOT", "DISTANCE", "ANGLE" -> Triple(
+                effectiveDim,
+                listOf(Pin("a", "A", V), Pin("b", "B", V)),
+                listOf(Pin("out", "Out", PinType.FLOAT)),
+            )
+            "LENGTH", "LENGTH_SQ" -> Triple(
+                effectiveDim,
+                listOf(Pin("v", "V", V)),
+                listOf(Pin("out", "Out", PinType.FLOAT)),
+            )
+            // Dim-locked
+            "CROSS" -> Triple(
+                "VEC3",
+                listOf(Pin("a", "A", PinType.VEC3), Pin("b", "B", PinType.VEC3)),
+                listOf(Pin("out", "Out", PinType.VEC3)),
+            )
+            "ROTATE2D" -> Triple(
+                "VEC2",
+                listOf(Pin("v", "V", PinType.VEC2), Pin("angle", "Angle", PinType.FLOAT)),
+                listOf(Pin("out", "Out", PinType.VEC2)),
+            )
+            // Conversions
+            "TO_VEC3" -> Triple(
+                effectiveDim,
+                listOf(Pin("v", "V", PinType.VEC2), Pin("z", "Z", PinType.FLOAT)),
+                listOf(Pin("out", "Out", PinType.VEC3)),
+            )
+            "TO_VEC2" -> Triple(
+                effectiveDim,
+                listOf(Pin("v", "V", PinType.VEC3)),
+                listOf(Pin("out", "Out", PinType.VEC2)),
+            )
+            // Unknown op → fallback to ADD shape
+            else -> Triple(
+                effectiveDim,
+                listOf(Pin("a", "A", V), Pin("b", "B", V)),
+                listOf(Pin("out", "Out", V)),
+            )
+        }
     }
 
     /** Non-snapshotting inner body — for use inside a [mutateGraph] block. */

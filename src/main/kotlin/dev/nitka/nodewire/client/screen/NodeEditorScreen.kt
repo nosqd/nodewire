@@ -264,6 +264,7 @@ class NodeEditorScreen(val pos: BlockPos, initialGraph: NodeGraph) :
                         // because they behave like nodes for wire endpoints.
                         GroupFramesLayer()
                         WireLayer()
+                        WireLabelOverlay()
                         GroupCollapsedLayer()
                         val groupsValue by editor.groups.collectAsState()
                         val hidden = remember(nodeIds, groupsValue) { hiddenNodesFor(editor) }

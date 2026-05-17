@@ -16,6 +16,7 @@ class NodeGraph {
     val nodes: MutableMap<NodeId, Node> = mutableMapOf()
     val edges: MutableList<Edge> = mutableListOf()
     val groups: MutableList<Group> = mutableListOf()
+    val comments: MutableList<Comment> = mutableListOf()
 
     fun add(node: Node) { nodes[node.id] = node }
 
@@ -62,11 +63,13 @@ class NodeGraph {
                 Node.CODEC.listOf().fieldOf("nodes").forGetter { g -> g.nodes.values.toList() },
                 Edge.CODEC.listOf().fieldOf("edges").forGetter { g -> g.edges.toList() },
                 Group.CODEC.listOf().optionalFieldOf("groups", emptyList()).forGetter { g -> g.groups.toList() },
-            ).apply(i) { nodeList, edgeList, groupList ->
+                Comment.CODEC.listOf().optionalFieldOf("comments", emptyList()).forGetter { g -> g.comments.toList() },
+            ).apply(i) { nodeList, edgeList, groupList, commentList ->
                 NodeGraph().also { g ->
                     for (n in nodeList) g.nodes[n.id] = n
                     g.edges.addAll(edgeList)
                     g.groups.addAll(groupList)
+                    g.comments.addAll(commentList)
                 }
             }
         }

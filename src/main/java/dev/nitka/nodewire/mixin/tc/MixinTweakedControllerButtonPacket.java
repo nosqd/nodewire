@@ -14,6 +14,8 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Mixes into TC's server-side button packet handlers and forwards the
@@ -33,9 +35,14 @@ public abstract class MixinTweakedControllerButtonPacket {
     @Shadow
     private short buttonStates;
 
+    private static final Logger NW_LOG = LogManager.getLogger("nodewire/tc");
+
     @Inject(method = "handleItem", at = @At("RETURN"), remap = false)
     private void nodewire$onHandleItem(ServerPlayer player, ItemStack heldItem, CallbackInfo ci) {
         BlockPos hub = ControllerHubItem.INSTANCE.getHub(heldItem);
+        NW_LOG.info("mixin button.handleItem: hub={} bits={} item={}",
+                hub, Integer.toBinaryString(this.buttonStates & 0xFFFF),
+                heldItem.getItem());
         if (hub == null) return;
         ControllerRedstoneOutput out = new ControllerRedstoneOutput();
         out.DecodeButtons(this.buttonStates);
@@ -45,6 +52,8 @@ public abstract class MixinTweakedControllerButtonPacket {
     @Inject(method = "handleLectern", at = @At("RETURN"), remap = false)
     private void nodewire$onHandleLectern(ServerPlayer player, TweakedLecternControllerBlockEntity lectern, CallbackInfo ci) {
         ItemStack stack = lectern.getController();
+        NW_LOG.info("mixin button.handleLectern: lectern={} stack={} bits={}",
+                lectern.getBlockPos(), stack, Integer.toBinaryString(this.buttonStates & 0xFFFF));
         if (stack == null || stack.isEmpty()) return;
         BlockPos hub = ControllerHubItem.INSTANCE.getHub(stack);
         if (hub == null) return;

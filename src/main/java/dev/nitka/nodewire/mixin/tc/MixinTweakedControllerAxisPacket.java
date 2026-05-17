@@ -14,6 +14,8 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Mirror of {@link MixinTweakedControllerButtonPacket} for axis packets.
@@ -35,9 +37,13 @@ public abstract class MixinTweakedControllerAxisPacket {
     @Shadow
     private float[] fullAxis;
 
+    private static final Logger NW_LOG = LogManager.getLogger("nodewire/tc");
+
     @Inject(method = "handleItem", at = @At("RETURN"), remap = false)
     private void nodewire$onHandleItem(ServerPlayer player, ItemStack heldItem, CallbackInfo ci) {
         BlockPos hub = ControllerHubItem.INSTANCE.getHub(heldItem);
+        NW_LOG.info("mixin axis.handleItem: hub={} axis-int=0x{} item={}",
+                hub, Integer.toHexString(this.axis), heldItem.getItem());
         if (hub == null) return;
         ControllerRedstoneOutput out = new ControllerRedstoneOutput();
         out.DecodeAxis(this.axis);
@@ -47,6 +53,8 @@ public abstract class MixinTweakedControllerAxisPacket {
     @Inject(method = "handleLectern", at = @At("RETURN"), remap = false)
     private void nodewire$onHandleLectern(ServerPlayer player, TweakedLecternControllerBlockEntity lectern, CallbackInfo ci) {
         ItemStack stack = lectern.getController();
+        NW_LOG.info("mixin axis.handleLectern: lectern={} axis-int=0x{}",
+                lectern.getBlockPos(), Integer.toHexString(this.axis));
         if (stack == null || stack.isEmpty()) return;
         BlockPos hub = ControllerHubItem.INSTANCE.getHub(stack);
         if (hub == null) return;

@@ -25,6 +25,26 @@ object ControllerBindHandler {
 
     private val LOG = LogManager.getLogger("nodewire/tc")
 
+    /**
+     * Server-side log of RMB-in-air with a TC controller — fires when
+     * the player triggers `Item.use()`, which TC's controller item maps
+     * to its `toggle()` (IDLE ↔ ACTIVE). Lets us see in the log whether
+     * the user is at least *trying* to activate the controller. If we
+     * never see this line but the user reports "I activated it" then
+     * they're confused about the gesture (probably still RMB'ing the
+     * block, not the sky).
+     */
+    @SubscribeEvent
+    fun onRightClickItem(event: PlayerInteractEvent.RightClickItem) {
+        if (event.level.isClientSide) return
+        if (!TweakedController.isLoaded()) return
+        if (!TweakedController.isControllerItem(event.itemStack)) return
+        LOG.info(
+            "rmb-air: TC controller use() triggered for {} — TC should toggle (IDLE ↔ ACTIVE) on the client",
+            event.entity.gameProfile.name,
+        )
+    }
+
     @SubscribeEvent
     fun onRightClickBlock(event: PlayerInteractEvent.RightClickBlock) {
         val state = event.level.getBlockState(event.pos)

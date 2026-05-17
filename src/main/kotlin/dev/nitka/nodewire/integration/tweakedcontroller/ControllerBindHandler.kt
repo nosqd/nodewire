@@ -27,10 +27,8 @@ object ControllerBindHandler {
 
     @SubscribeEvent
     fun onRightClickBlock(event: PlayerInteractEvent.RightClickBlock) {
-        if (event.level.isClientSide) return
         val state = event.level.getBlockState(event.pos)
         if (state.block !is LogicBlock) return
-        val player = event.entity
         val stack = event.itemStack
         if (!TweakedController.isLoaded()) {
             LOG.debug("bind: TC not loaded, ignoring RMB on {}", event.pos)
@@ -40,6 +38,18 @@ object ControllerBindHandler {
             LOG.debug("bind: held item is not a TC controller — pass through")
             return
         }
+
+        // Cancel on BOTH sides so neither the server nor the client opens
+        // the editor. LogicBlock.use() opens the editor inside its
+        // `level.isClientSide` branch via DistExecutor — server-side
+        // cancellation alone isn't enough; the client must also bail out
+        // before its own Block.use() fires.
+        event.setCancellationResult(InteractionResult.SUCCESS)
+        event.isCanceled = true
+
+        // From here on, NBT mutation only — server-side authoritative.
+        if (event.level.isClientSide) return
+        val player = event.entity
 
         if (player.isShiftKeyDown) {
             ControllerHubItem.clearHub(stack)
@@ -76,7 +86,5 @@ object ControllerBindHandler {
                 "bind: REMINDER — activate the controller with right-click in air for packets to send",
             )
         }
-        event.setCancellationResult(InteractionResult.SUCCESS)
-        event.isCanceled = true
     }
 }

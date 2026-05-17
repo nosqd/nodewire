@@ -65,14 +65,24 @@ fun GroupFrame(group: Group) {
         Surface(
             modifier = Modifier
                 .size(w, HEADER_HEIGHT)
-                .pointerInput { ev, _, _ ->
+                .pointerInput { ev, x, y ->
                     when (ev) {
                         is PointerEvent.Drag -> {
                             val zoom = canvas?.zoom ?: 1f
                             editor.moveGroup(group.id, ev.deltaX / zoom, ev.deltaY / zoom)
                             true
                         }
-                        is PointerEvent.Press -> true
+                        is PointerEvent.Press -> {
+                            // Right-click on header → open group context menu.
+                            if (ev.button == RIGHT_BUTTON && canvas != null) {
+                                val worldX = (bbox.minX - pad) + x
+                                val worldY = (bbox.minY - pad - HEADER_HEIGHT) + y
+                                val screenX = ((worldX + canvas.panX) * canvas.zoom).toInt()
+                                val screenY = ((worldY + canvas.panY) * canvas.zoom).toInt()
+                                editor.openGroupMenu(screenX, screenY, group.id)
+                            }
+                            true
+                        }
                         else -> false
                     }
                 },
@@ -103,3 +113,4 @@ fun GroupFrame(group: Group) {
 }
 
 private const val HEADER_HEIGHT = 14
+private const val RIGHT_BUTTON = 1

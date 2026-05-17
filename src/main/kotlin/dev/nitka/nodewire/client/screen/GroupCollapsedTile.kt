@@ -62,14 +62,23 @@ fun GroupCollapsedTile(group: Group) {
             .absolutePosition(group.pos.x.toInt(), group.pos.y.toInt())
             .width(w)
             .background(NwTheme.colors.surface)
-            .pointerInput { ev, _, _ ->
+            .pointerInput { ev, x, y ->
                 when (ev) {
                     is PointerEvent.Drag -> {
                         val zoom = canvas?.zoom ?: 1f
                         editor.moveGroup(group.id, ev.deltaX / zoom, ev.deltaY / zoom)
                         true
                     }
-                    is PointerEvent.Press -> true
+                    is PointerEvent.Press -> {
+                        if (ev.button == RIGHT_BUTTON && canvas != null) {
+                            val worldX = group.pos.x + x
+                            val worldY = group.pos.y + y
+                            val screenX = ((worldX + canvas.panX) * canvas.zoom).toInt()
+                            val screenY = ((worldY + canvas.panY) * canvas.zoom).toInt()
+                            editor.openGroupMenu(screenX, screenY, group.id)
+                        }
+                        true
+                    }
                     else -> false
                 }
             },
@@ -178,3 +187,4 @@ private fun proxyPinColor(type: PinType): Color = when (type) {
 
 private const val TILE_WIDTH = 140
 private const val PIN_DOT_SIZE = 8
+private const val RIGHT_BUTTON = 1

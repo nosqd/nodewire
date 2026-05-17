@@ -653,13 +653,47 @@ object NodeConfigContent {
     }
 
     /**
-     * VecMake: dim selector. Stub for Phase 6 — currently no-op UI so
-     * the NodeType registration compiles.
+     * VecMake: a single Select dim picker. Switching dim adds/removes the
+     * z input pin and changes output pin type (handled by [EditorState.changeVecMakeSplitDim]).
      */
-    val VecMake: @Composable (Node) -> Unit = { _ -> }
+    val VecMake: @Composable (Node) -> Unit = { node ->
+        val editor = LocalEditorState.current
+        var dim by remember(node.id) {
+            mutableStateOf(node.config.getString("dim").ifEmpty { "VEC2" })
+        }
+        LabeledRow("Dim") {
+            Select(
+                options = VEC_DIMS,
+                selected = dim,
+                onSelect = { next ->
+                    dim = next
+                    editor?.changeVecMakeSplitDim(node.id, next)
+                },
+                label = { it.lowercase() },
+            )
+        }
+    }
 
-    /** VecSplit: dim selector. Phase 6 fills body. */
-    val VecSplit: @Composable (Node) -> Unit = { _ -> }
+    /** VecSplit: same Select as VecMake; output pins reshape. */
+    val VecSplit: @Composable (Node) -> Unit = { node ->
+        val editor = LocalEditorState.current
+        var dim by remember(node.id) {
+            mutableStateOf(node.config.getString("dim").ifEmpty { "VEC2" })
+        }
+        LabeledRow("Dim") {
+            Select(
+                options = VEC_DIMS,
+                selected = dim,
+                onSelect = { next ->
+                    dim = next
+                    editor?.changeVecMakeSplitDim(node.id, next)
+                },
+                label = { it.lowercase() },
+            )
+        }
+    }
+
+    private val VEC_DIMS = listOf("VEC2", "VEC3")
 
     /** VecOp: op + dim selectors. Phase 6 fills body. */
     val VecOp: @Composable (Node) -> Unit = { _ -> }

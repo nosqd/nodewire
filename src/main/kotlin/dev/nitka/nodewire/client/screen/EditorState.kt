@@ -436,6 +436,55 @@ class EditorState(val graph: NodeGraph, val pos: net.minecraft.core.BlockPos = n
         }
     }
 
+    /**
+     * VecMake / VecSplit node: rebuild input/output pins for the new
+     * dimension and write `config.dim`. VecMake has scalar inputs +
+     * vector output; VecSplit is the inverse. Identify by node typeKey.
+     */
+    fun changeVecMakeSplitDim(
+        id: dev.nitka.nodewire.graph.NodeId,
+        newDim: String,  // "VEC2" or "VEC3"
+    ) {
+        mutateGraph(mergeable = false) {
+            _updateNodeInternal(id) { n ->
+                val isVec2 = newDim == "VEC2"
+                val vecType = if (isVec2) dev.nitka.nodewire.graph.PinType.VEC2 else dev.nitka.nodewire.graph.PinType.VEC3
+                val isMake = n.typeKey.path == "vec_make"
+                val newInputs: List<dev.nitka.nodewire.graph.Pin>
+                val newOutputs: List<dev.nitka.nodewire.graph.Pin>
+                if (isMake) {
+                    val xs = mutableListOf(
+                        dev.nitka.nodewire.graph.Pin("x", "X", dev.nitka.nodewire.graph.PinType.FLOAT),
+                        dev.nitka.nodewire.graph.Pin("y", "Y", dev.nitka.nodewire.graph.PinType.FLOAT),
+                    )
+                    if (!isVec2) xs.add(
+                        dev.nitka.nodewire.graph.Pin("z", "Z", dev.nitka.nodewire.graph.PinType.FLOAT),
+                    )
+                    newInputs = xs
+                    newOutputs = listOf(
+                        dev.nitka.nodewire.graph.Pin("out", "Out", vecType),
+                    )
+                } else {
+                    // vec_split
+                    newInputs = listOf(
+                        dev.nitka.nodewire.graph.Pin("in", "In", vecType),
+                    )
+                    val outs = mutableListOf(
+                        dev.nitka.nodewire.graph.Pin("x", "X", dev.nitka.nodewire.graph.PinType.FLOAT),
+                        dev.nitka.nodewire.graph.Pin("y", "Y", dev.nitka.nodewire.graph.PinType.FLOAT),
+                    )
+                    if (!isVec2) outs.add(
+                        dev.nitka.nodewire.graph.Pin("z", "Z", dev.nitka.nodewire.graph.PinType.FLOAT),
+                    )
+                    newOutputs = outs
+                }
+                val newConfig = n.config.copy().apply { putString("dim", newDim) }
+                n.copy(inputs = newInputs, outputs = newOutputs, config = newConfig)
+            }
+            _disconnectAllEdgesInternal(id)
+        }
+    }
+
     private fun defaultConvertModeFor(
         s: dev.nitka.nodewire.graph.PinType,
         t: dev.nitka.nodewire.graph.PinType,

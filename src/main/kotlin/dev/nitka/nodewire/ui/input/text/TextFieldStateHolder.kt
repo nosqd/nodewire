@@ -187,4 +187,29 @@ class TextFieldStateHolder(
         val idx = pixelToCharIndex(localX)
         state = state.copy(selection = TextRange(selectionAnchor, idx))
     }
+
+    var fontHeightPx: Int = 9
+
+    /** Pixel x of the caret in text-local coordinates (NOT including paddingLeft). */
+    fun caretPixelX(): Int = fontWidthOf(state.text.substring(0, state.caret))
+
+    /** Pixel range of the selection in text-local coordinates, or null if collapsed. */
+    fun selectionPixelRange(): IntRange? {
+        val sel = state.selection
+        if (sel.collapsed) return null
+        val a = fontWidthOf(state.text.substring(0, sel.min))
+        val b = fontWidthOf(state.text.substring(0, sel.max))
+        return a..b
+    }
+
+    /** Scroll `scrollXPx` so caret stays within the visible region (with a small gutter). */
+    fun ensureCaretVisible() {
+        if (visibleWidthPx <= 0) return
+        val caretX = caretPixelX()
+        val gutter = 2
+        val visibleStart = scrollXPx + gutter
+        val visibleEnd = scrollXPx + visibleWidthPx - gutter
+        if (caretX < visibleStart) scrollXPx = (caretX - gutter).coerceAtLeast(0)
+        else if (caretX > visibleEnd) scrollXPx = caretX - visibleWidthPx + gutter
+    }
 }

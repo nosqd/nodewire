@@ -38,6 +38,19 @@ object EditorKeyBindings {
         EditorKeyBinding(InputConstants.KEY_Y, GLFW.GLFW_MOD_CONTROL)                { e, _, _ -> e.redoGraph(); true },
         EditorKeyBinding(InputConstants.KEY_F)                                       { e, _, _ -> e.frameSelectedOrAll(); true },
         EditorKeyBinding(InputConstants.KEY_F, GLFW.GLFW_MOD_SHIFT)                  { e, _, _ -> e.frameAll(); true },
+        EditorKeyBinding(InputConstants.KEY_G, GLFW.GLFW_MOD_CONTROL) { e, _, _ ->
+            val id = e.createGroupFromSelection("Group")
+            id != null
+        },
+        EditorKeyBinding(InputConstants.KEY_G, GLFW.GLFW_MOD_CONTROL or GLFW.GLFW_MOD_SHIFT) { e, _, _ ->
+            val ids = e.selectedNodes
+            if (ids.isEmpty()) return@EditorKeyBinding false
+            val toRemove = e.graph.groups.filter { g ->
+                g.members.any { m -> m is dev.nitka.nodewire.graph.MemberRef.Node && m.id in ids }
+            }.map { it.id }
+            for (gid in toRemove) e.ungroup(gid)
+            toRemove.isNotEmpty()
+        },
         EditorKeyBinding(InputConstants.KEY_ESCAPE) { e, _, _ ->
             when {
                 e.contextMenu != null -> { e.closeContextMenu(); true }

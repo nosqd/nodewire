@@ -113,6 +113,7 @@ fun NodeCard(
     ) {
         Column {
             TitleBar(
+                nodeId = nodeId,
                 node = node,
                 onPress = {
                     if (editor == null) return@TitleBar
@@ -162,10 +163,13 @@ private fun cardStyle(selected: Boolean): SurfaceStyle = SurfaceStyle(
 
 @Composable
 private fun TitleBar(
+    nodeId: dev.nitka.nodewire.graph.NodeId,
     node: Node,
     onPress: () -> Unit = {},
     onDragDelta: (Float, Float) -> Unit,
 ) {
+    val editor = LocalEditorState.current
+    var lastPressMillis by remember { mutableStateOf(0L) }
     val category = NodeTypeRegistry.get(node.typeKey)?.category ?: NodeCategory.LOGIC
     val baseColor = headerColorFor(category)
     val targetColor = NwTheme.colors.surface
@@ -188,7 +192,14 @@ private fun TitleBar(
                 when (ev) {
                     is PointerEvent.Press -> {
                         if (ev.button == LEFT_BUTTON) {
-                            onPress()
+                            val now = System.currentTimeMillis()
+                            if (now - lastPressMillis < DOUBLE_CLICK_MS) {
+                                editor?.renamingNode = nodeId
+                                lastPressMillis = 0L
+                            } else {
+                                lastPressMillis = now
+                                onPress()
+                            }
                             true
                         } else false
                     }
@@ -228,6 +239,7 @@ private fun TitleBar(
 
 private const val LEFT_BUTTON = 0
 private const val RIGHT_BUTTON = 1
+private const val DOUBLE_CLICK_MS = 350L
 
 @Composable
 private fun ConfigSection(node: Node) {

@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest a new node, editor capability, or integration.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What do you want?
+      description: One or two sentences. What should exist that doesn't yet?
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why?
+      description: What problem does this solve, or what does it unlock? Concrete use cases help.
+    validations:
+      required: true
+
+  - type: textarea
+    id: sketch
+    attributes:
+      label: Sketch (optional)
+      description: UI mockup, example graph, screenshot from another mod, anything that helps visualize it.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered (optional)
+      description: Workarounds you tried, other mods you used, why they didn't fit.

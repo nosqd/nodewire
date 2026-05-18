@@ -1,0 +1,58 @@
+name: Bug report
+description: Report something that's broken or behaves incorrectly.
+labels: ["bug"]
+body:
+  - type: input
+    id: nodewire_version
+    attributes:
+      label: Nodewire version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: forge_version
+    attributes:
+      label: Forge version
+      placeholder: "47.4.10"
+    validations:
+      required: true
+
+  - type: input
+    id: other_mods
+    attributes:
+      label: Other relevant mods (with versions)
+      description: VS / Create / JEI / EMI / Tweaked Controllers etc. Skip if vanilla-only.
+      placeholder: "Create 6.0.8-289, Valkyrien Skies 2.4.10"
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Place a Nodewire block …
+        2. Open the editor and …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / crash report
+      description: Paste the relevant log section, or upload `logs/latest.log` / crash report as a file attachment.
+      render: text

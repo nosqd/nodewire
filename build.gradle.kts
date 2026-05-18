@@ -38,6 +38,7 @@ repositories {
     maven("https://thedarkcolour.github.io/KotlinForForge/")
     maven("https://maven.createmod.net")             // Create, Ponder, Flywheel
     maven("https://maven.ithundxr.dev/snapshots")    // Registrate (1.21.x is under snapshots maven)
+    maven("https://maven.architectury.dev/")         // Architectury (transitive via Create)
     maven("https://maven.blamejared.com/")           // JEI
     maven("https://maven.terraformersmc.com/")       // EMI
     maven("https://maven.ryanhcode.dev/releases")    // Sable
@@ -88,6 +89,18 @@ neoForge {
     }
 }
 
+// Create 6.0.10-280's POM declares a transitive dependency on
+// `dev.architectury:architectury-neoforge:13d.0.8`, which doesn't exist on
+// any maven (the real artifact is `13.0.8`, no `d`). Substitute it so
+// Gradle can resolve.
+configurations.all {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("dev.architectury:architectury-neoforge:13d.0.8"))
+            .using(module("dev.architectury:architectury-neoforge:13.0.8"))
+            .because("Create 6.0.10-280 POM has a typo'd Architectury version")
+    }
+}
+
 // KFF bundles kotlin-stdlib at runtime — same JPMS constraint as before.
 // compose-runtime + yoga are still SHADED into the mod jar so they live in
 // our module and can see KFF's kotlin.* exports.
@@ -135,8 +148,12 @@ dependencies {
     // runtimeOnly("curse.maven:create-aeronautics-676721:8003941")
 
     // --- Create 6.0.10 for NeoForge 1.21.1 + transitive deps ---
-    // :slim excludes nested JarInJar mods so we control versions explicitly.
-    implementation("com.simibubi.create:create-${mcVer}:6.0.10-280:slim")
+    // :slim + isTransitive = false: skip Create's POM-declared optional deps
+    // (CC:Tweaked, Architectury, etc.) so we control versions explicitly.
+    // Per the official Create wiki recipe for 1.21.1.
+    implementation("com.simibubi.create:create-${mcVer}:6.0.10-280:slim") {
+        isTransitive = false
+    }
     implementation("net.createmod.ponder:ponder-neoforge:1.0.82+mc${mcVer}")
     compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${mcVer}:1.0.6")
     runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${mcVer}:1.0.6")

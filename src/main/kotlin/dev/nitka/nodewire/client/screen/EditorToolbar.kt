@@ -107,7 +107,13 @@ fun EditorToolbar(pos: BlockPos, onOpenBindings: () -> Unit) {
 
         Box(modifier = Modifier.weight(1f))
 
-        // TODO(post-port): TC status indicator removed — no 1.21.1 build
+        val tcLoaded = dev.nitka.nodewire.integration.tweakedcontroller.TweakedController.isLoaded()
+        if (!tcLoaded) {
+            Text(
+                "TC not loaded",
+                style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+            )
+        }
         MenuButton(
             label = "Bindings…",
             isOpen = false,

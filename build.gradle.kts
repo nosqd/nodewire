@@ -147,6 +147,11 @@ dependencies {
     // compileOnly("curse.maven:create-aeronautics-676721:8003941")
     // runtimeOnly("curse.maven:create-aeronautics-676721:8003941")
 
+    // --- Create: Tweaked Controllers 1.2.7 (NeoForge 1.21.1) ---
+    // Project id 898849, file id 7958165 (Apr 20 2026 NeoForge build).
+    compileOnly("curse.maven:create-tweaked-controllers-898849:7958165")
+    runtimeOnly("curse.maven:create-tweaked-controllers-898849:7958165")
+
     // --- Create 6.0.10 for NeoForge 1.21.1 + transitive deps ---
     // :slim + isTransitive = false: skip Create's POM-declared optional deps
     // (CC:Tweaked, Architectury, etc.) so we control versions explicitly.

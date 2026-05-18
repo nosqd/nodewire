@@ -44,9 +44,9 @@ class StockNodeTypesTest {
         // Vector toolkit: VEC_SPLIT added (+1 → 22).
         // Vector toolkit: VEC_OP added (+1 → 23).
         // TC: controller_input added (+1 → 24).
-        // NeoForge 1.21.1 port: TC has no 1.21.1 release; controller_input
-        // registration removed in Phase 5+7 strip (-1 → 23).
-        assertEquals(23, NodeTypeRegistry.all().size)
+        // NeoForge 1.21.1 port: TC 1.2.7 has a 1.21.1 NeoForge build;
+        // controller_input restored in Phase 7-TC.
+        assertEquals(24, NodeTypeRegistry.all().size)
     }
 
     @Test

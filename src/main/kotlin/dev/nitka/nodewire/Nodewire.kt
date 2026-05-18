@@ -24,6 +24,8 @@ object Nodewire {
         // automatically via the event bus; no manual call needed.
         EndpointBackends.register(WorldBackend)
         FORGE_BUS.addListener(HighlightServerCommand::register)
+        FORGE_BUS.addListener(dev.nitka.nodewire.integration.tweakedcontroller.ControllerBindHandler::onRightClickItem)
+        FORGE_BUS.addListener(dev.nitka.nodewire.integration.tweakedcontroller.ControllerBindHandler::onRightClickBlock)
         if (FMLEnvironment.dist == Dist.CLIENT) {
             dev.nitka.nodewire.client.NodewireClient.registerOnModBus(MOD_BUS)
         }

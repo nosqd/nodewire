@@ -218,6 +218,23 @@ class EditorState(val graph: NodeGraph, val pos: net.minecraft.core.BlockPos = n
         }
     }
 
+    /** Node currently being labelled via the inline overlay (null = idle). */
+    var renamingNode: NodeId? by mutableStateOf(null)
+
+    /**
+     * Update a node's label. Blank or null clears it (stored as null so
+     * empty-string and null are not distinguishable downstream).
+     */
+    fun setNodeLabel(id: NodeId, label: String?) {
+        mutateGraph(mergeable = false) {
+            val sanitized = label?.takeIf { it.isNotBlank() }
+            val node = graph.nodes[id] ?: return@mutateGraph
+            val updated = node.copy(label = sanitized)
+            graph.nodes[id] = updated
+            nodeFlows[id]?.value = updated
+        }
+    }
+
     /** What context menu (if any) is currently open. Null = closed. */
     var contextMenu: ContextMenuTarget? by mutableStateOf(null)
         private set

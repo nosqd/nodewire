@@ -273,6 +273,7 @@ class NodeEditorScreen(val pos: BlockPos, initialGraph: NodeGraph) :
                             if (id in hidden) continue
                             NodeCard(nodeId = id)
                         }
+                        NodeLabelOverlay()
                         // Rubber-band rect on top of everything inside the
                         // canvas pose, so it pans/zooms with the world.
                         SelectionRect()

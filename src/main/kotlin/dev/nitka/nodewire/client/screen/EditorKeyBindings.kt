@@ -53,6 +53,7 @@ object EditorKeyBindings {
         },
         EditorKeyBinding(InputConstants.KEY_ESCAPE) { e, _, _ ->
             when {
+                e.renamingNode != null -> { e.renamingNode = null; true }
                 e.renamingEdge != null -> { e.renamingEdge = null; true }
                 e.contextMenu != null -> { e.closeContextMenu(); true }
                 e.selectedNodes.isNotEmpty() -> { e.clearSelection(); true }

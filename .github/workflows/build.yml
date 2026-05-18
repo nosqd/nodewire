@@ -26,11 +26,11 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build
-        run: ./gradlew build --no-daemon --stacktrace
+      - name: Build (no tests)
+        run: ./gradlew build -x test --no-daemon --no-parallel --stacktrace
 
       - name: Test
-        run: ./gradlew test --no-daemon --stacktrace
+        run: ./gradlew test --no-daemon --no-parallel --stacktrace
 
       - name: Upload test reports
         if: failure()

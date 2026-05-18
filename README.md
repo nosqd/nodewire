@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.svg" alt="Nodewire logo" width="200"/>
+</p>
+
 # Nodewire
 
 A Minecraft Forge 1.20.1 mod that replaces redstone with a node-based logic system. Build logic visually in an in-world editor, then export it as a reusable graph — across ship boundaries (Valkyrien Skies) and alongside Create.

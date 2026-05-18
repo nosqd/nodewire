@@ -1,9 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 440" width="800" height="440">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
   <defs>
     <linearGradient id="block" x1="200" y1="80" x2="200" y2="360" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#e4ff66"/>
       <stop offset="50%" stop-color="#86c61e"/>
       <stop offset="100%" stop-color="#2e5a0d"/>
+    </linearGradient>
+
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1a1f26"/>
+      <stop offset="100%" stop-color="#070a0d"/>
     </linearGradient>
 
     <filter id="drop" x="-30%" y="-30%" width="160%" height="160%">
@@ -15,11 +20,6 @@
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-
-    <mask id="cut-bolt" maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="400">
-      <rect width="400" height="400" fill="white"/>
-      <path d="M 228 108 L 128 218 L 188 218 L 172 328 L 272 218 L 212 218 Z" fill="black"/>
-    </mask>
 
     <mask id="cut-hub" maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="400">
       <rect width="400" height="400" fill="white"/>
@@ -45,27 +45,10 @@
         <circle cx="253.03" cy="166.97" r="14"/>
       </g>
     </mask>
-
-    <symbol id="hex" viewBox="0 0 400 400" width="400" height="400">
-      <polygon points="200,80 320,150 320,290 200,360 80,290 80,150" fill="url(#block)"/>
-    </symbol>
   </defs>
 
-  <rect width="800" height="440" fill="#0b0d10"/>
-
-  <style>
-    .label { fill: #4b5563; font-family: 'JetBrains Mono', monospace; font-size: 13px; letter-spacing: 3px; text-anchor: middle; }
-    .ref { fill: #b6f23d; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 3px; text-anchor: middle; }
-  </style>
-
-  <g transform="translate(0,0)">
-    <g filter="url(#drop)" mask="url(#cut-bolt)"><use href="#hex"/></g>
-    <text class="label" x="200" y="395">BOLT</text>
-    <text class="ref" x="200" y="415">/ REF</text>
-  </g>
-
-  <g transform="translate(400,0)">
-    <g filter="url(#drop)" mask="url(#cut-hub)"><use href="#hex"/></g>
-    <text class="label" x="200" y="395">HUB</text>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <g filter="url(#drop)" mask="url(#cut-hub)">
+    <polygon points="200,80 320,150 320,290 200,360 80,290 80,150" fill="url(#block)"/>
   </g>
 </svg>

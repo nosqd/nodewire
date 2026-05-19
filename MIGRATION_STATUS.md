@@ -20,16 +20,12 @@ Branch: `port/neoforge-1.21.1`. **This branch does not compile yet** — porting
   - `PinValue.kt`: `Codec.STRING.dispatch` → `MapCodec` form using `RecordCodecBuilder.mapCodec`.
   - `ChannelLinkToolItem.kt` + `PinValue.kt` constant-of-ItemStack: NBT → `DataComponents.CUSTOM_DATA` (`CustomData` wrapper).
   - `CreateRedstoneLink.kt` + `RedstoneLinkSlotPicker.kt`: `ItemStack.of` → registry-aware `ItemStack.parse(RegistryAccess, Tag)`. `frequencyOf(Level, ...)` for the new Create 6.0.10 signature.
-- [x] **Phase 9 — Tests green.** `./gradlew test` passes: **337 tests, 0 failures** (parity with master after TC reinstate). `StockNodeTypesTest` count back to 24.
+- [x] **Phase 9 — Tests green.** `./gradlew test` passes: **338 tests, 0 failures** (337 from parity-with-master after TC reinstate + 1 new `SableSubLevelBackendCodecTest`). `StockNodeTypesTest` count back to 24.
+- [x] **Phase 6 — Sable sub-level backend.** Built on **Sable Companion** (`dev.ryanhcode.sable-companion:sable-companion-common-1.21.1:1.6.0`), a companion lib with safe no-op defaults that Sable replaces via Gradle capability resolution when installed — so we can compile/run against Companion unconditionally without any `ModList.isLoaded` gate. `integration/sable/SableSubLevelBackend.kt` implements `EndpointBackend` with payload `(UUID subLevelId, BlockPos)`. Sub-levels live as plot regions inside the parent `Level`, so `resolveBlockEntity` resolves the stored BlockPos through the parent level directly; `worldCenter`/`worldDirection` apply `SubLevelAccess.logicalPose()` server-side and `ClientSubLevelAccess.renderPose()` client-side (smooth partial-tick); `claims(level, worldPos)` consults `SableCompanion.INSTANCE.getContaining`. Registered in `Nodewire.init` BEFORE `WorldBackend` so the world remains the final fallback. Round-trip codec test: `SableSubLevelBackendCodecTest`.
 - [x] **Create deps fix-up.** `dependencySubstitution` for Create 6.0.10-280's typo'd Architectury POM coord (`13d.0.8` → `13.0.8`). `isTransitive = false` on Create slim variant to skip POM-declared optional deps (CC:Tweaked etc.). Added `maven.architectury.dev` repo.
 
 ## What's pending
 
-- [ ] **Phase 6 — Sable sub-level backend.** Replaces VS2's role. Needs Sable API research (their wiki, javadocs, or source). Steps:
-  1. Confirm exact maven coord against `https://maven.ryanhcode.dev/releases` (current guess: `dev.ryanhcode.sable:sable-neoforge:1.2.2+mc1.21.1`). The provisional dep is commented out in `build.gradle.kts`.
-  2. Add `SableSubLevelBackend.kt` under `integration/sable/` implementing `EndpointBackend`. Payload: `(subLevelId, local BlockPos)`. Lookup: Sable's sub-level API.
-  3. Register the backend in `EndpointBackends`.
-  4. Add round-trip codec test (mirror of `EndpointRefCodecTest` for the new payload type).
 - [ ] **Phase 7 (Aeronautics part) — Create Aeronautics integration.** Re-enable the Curse Maven dep (`curse.maven:create-aeronautics-676721:8003941`, currently commented out). Decide what nodes / hooks the mod exposes that Nodewire should integrate (signal sources on aircraft, etc.).
 - [ ] **Post-port TODO sweep.** All `// TODO(post-port)` markers from Phase 5+7 strip were cleared in Phase 7-TC reinstate. Re-check with:
   ```
@@ -50,7 +46,7 @@ Branch: `port/neoforge-1.21.1`. **This branch does not compile yet** — porting
 | Ponder | `1.0.82` |
 | Flywheel | `1.0.6` |
 | Registrate | `MC1.21-1.3.0+67` |
-| Sable | `1.2.2+mc1.21.1` (replaces VS2) |
+| Sable Companion | `sable-companion-common-1.21.1:1.6.0` (replaces VS2; safe defaults without Sable) |
 | Create Aeronautics | `1.2.1` (Curse Maven file `8003941`) |
 | MixinExtras | `0.4.1` |
 | JEI | `19.21.0.247` |

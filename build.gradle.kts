@@ -143,11 +143,13 @@ dependencies {
     // implementation / compileOnly / runtimeOnly (no modImplementation,
     // that was a legacyForge-only DSL to trigger SRG → Mojang remap).
 
-    // --- Sable — sub-level physics library (replaces Valkyrien Skies 2) ---
-    // TODO(phase-6): re-enable once exact maven coord is confirmed against
-    // https://maven.ryanhcode.dev/releases . The group:artifact:version
-    // string is provisional and was not resolved on first attempt.
-    // implementation("dev.ryanhcode.sable:sable-neoforge:1.2.2+mc1.21.1")
+    // --- Sable Companion — safe-default API stubs that Sable replaces at runtime ---
+    // The companion artifact provides the SableCompanion.INSTANCE singleton with
+    // no-op defaults when Sable itself isn't installed; when Sable is present, it
+    // overrides the impl via service-loader. Compiling/running against Companion
+    // alone is sufficient for both the modded-with-Sable and vanilla-NeoForge case.
+    // Artifact ID embeds the MC version. 1.21.1 → -common-1.21.1, latest 1.6.0.
+    implementation("dev.ryanhcode.sable-companion:sable-companion-common-1.21.1:1.6.0")
 
     // --- Create Aeronautics 1.2.1 (via Curse Maven) ---
     // TODO(phase-7): re-enable when verified. Curse file id 8003941 is the

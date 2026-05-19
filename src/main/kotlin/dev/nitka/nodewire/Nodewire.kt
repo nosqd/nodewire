@@ -5,6 +5,7 @@ import dev.nitka.nodewire.command.HighlightServerCommand
 import dev.nitka.nodewire.endpoint.EndpointBackends
 import dev.nitka.nodewire.endpoint.WorldBackend
 import dev.nitka.nodewire.graph.StockNodeTypes
+import dev.nitka.nodewire.integration.sable.SableSubLevelBackend
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.fml.common.Mod
 import net.neoforged.fml.loading.FMLEnvironment
@@ -22,6 +23,10 @@ object Nodewire {
         StockNodeTypes.registerAll()
         // NodewireNetwork is an @EventBusSubscriber — registration happens
         // automatically via the event bus; no manual call needed.
+        // Sable backend before WorldBackend — claims() probes in registration
+        // order and WorldBackend always wins as the fallback. Companion's safe
+        // defaults make this no-op when Sable itself isn't loaded.
+        SableSubLevelBackend.register()
         EndpointBackends.register(WorldBackend)
         FORGE_BUS.addListener(HighlightServerCommand::register)
         FORGE_BUS.addListener(dev.nitka.nodewire.integration.tweakedcontroller.ControllerBindHandler::onRightClickItem)

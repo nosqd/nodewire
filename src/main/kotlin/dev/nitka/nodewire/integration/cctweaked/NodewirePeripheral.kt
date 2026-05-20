@@ -79,4 +79,28 @@ class NodewirePeripheral(
         be.nwWriteChannelInput(name, pv)
         return true
     }
+
+    /**
+     * { inputs = {name=type, ...}, outputs = {name=type, ...} } where
+     * `type` is the lowercased PinType name ("bool", "vec3", …). Blank-
+     * named channels are excluded; duplicates → first wins.
+     */
+    @LuaFunction
+    fun listChannels(): Map<String, Any> {
+        val inputs = NwChannelIntrospection.inputs(be.graph)
+            .mapValues { (_, t) -> t.name.lowercase() }
+        val outputs = NwChannelIntrospection.outputs(be.graph)
+            .mapValues { (_, t) -> t.name.lowercase() }
+        return mapOf("inputs" to inputs, "outputs" to outputs)
+    }
+
+    /** Array of nodes with `{ id, type, label, inputs, outputs }`. */
+    @LuaFunction
+    fun getNodes(): List<Map<String, Any?>> =
+        NwGraphIntrospection.nodesLua(be.graph)
+
+    /** Array of edges with `{ from, to, label }`. */
+    @LuaFunction
+    fun getEdges(): List<Map<String, Any?>> =
+        NwGraphIntrospection.edgesLua(be.graph)
 }

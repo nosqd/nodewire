@@ -318,6 +318,9 @@ object StockNodeTypes {
         NodeTypeRegistry.register(
             dev.nitka.nodewire.integration.tweakedcontroller.ControllerInputNode.CONTROLLER_INPUT,
         )
+        NodeTypeRegistry.register(
+            dev.nitka.nodewire.integration.aeronautics.AeroInputNode.AERONAUTICS_INPUT,
+        )
     }
 
     private fun nodeType(

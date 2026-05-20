@@ -181,7 +181,7 @@ dependencies {
     // neoforge.mods.toml-style descriptor and references
     // net.neoforged.neoforge.capabilities.BlockCapability via
     // dan200.computercraft.api.peripheral.PeripheralCapability).
-    val ccVer = "1.113.1"
+    val ccVer = "1.119.0"
     compileOnly("cc.tweaked:cc-tweaked-${mcVer}-forge:${ccVer}")
     runtimeOnly("cc.tweaked:cc-tweaked-${mcVer}-forge:${ccVer}")
     testImplementation("cc.tweaked:cc-tweaked-${mcVer}-forge:${ccVer}")

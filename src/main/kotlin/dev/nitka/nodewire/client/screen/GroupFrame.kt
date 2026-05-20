@@ -3,7 +3,9 @@ package dev.nitka.nodewire.client.screen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import dev.nitka.nodewire.graph.Group
 import dev.nitka.nodewire.graph.GroupBbox
 import dev.nitka.nodewire.graph.GroupId
@@ -53,18 +55,19 @@ fun GroupFrame(group: Group) {
     val bbox = GroupBbox.compute(group.pos, rects)
     val pad = NwTheme.dimens.space8
     val w = (bbox.maxX - bbox.minX).toInt() + pad * 2
-    val h = (bbox.maxY - bbox.minY).toInt() + pad * 2 + HEADER_HEIGHT
+    val h = (bbox.maxY - bbox.minY).toInt() + pad * 2 + GROUP_HEADER_HEIGHT
+    var lastHeaderPressMillis by remember { mutableStateOf(0L) }
 
     Box(
         modifier = Modifier
-            .absolutePosition((bbox.minX - pad).toInt(), (bbox.minY - pad - HEADER_HEIGHT).toInt())
+            .absolutePosition((bbox.minX - pad).toInt(), (bbox.minY - pad - GROUP_HEADER_HEIGHT).toInt())
             .size(w, h)
             .background(NwTheme.colors.surfaceHover)
             .border(BorderStroke(1, NwTheme.colors.border), NwTheme.shapes.medium),
     ) {
         Surface(
             modifier = Modifier
-                .size(w, HEADER_HEIGHT)
+                .size(w, GROUP_HEADER_HEIGHT)
                 .pointerInput { ev, x, y ->
                     when (ev) {
                         is PointerEvent.Drag -> {
@@ -73,13 +76,27 @@ fun GroupFrame(group: Group) {
                             true
                         }
                         is PointerEvent.Press -> {
-                            // Right-click on header → open group context menu.
-                            if (ev.button == RIGHT_BUTTON && canvas != null) {
-                                val worldX = (bbox.minX - pad) + x
-                                val worldY = (bbox.minY - pad - HEADER_HEIGHT) + y
-                                val screenX = ((worldX + canvas.panX) * canvas.zoom).toInt()
-                                val screenY = ((worldY + canvas.panY) * canvas.zoom).toInt()
-                                editor.openGroupMenu(screenX, screenY, group.id)
+                            when (ev.button) {
+                                LEFT_BUTTON -> {
+                                    // LMB double-click on header → start rename.
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastHeaderPressMillis < DOUBLE_CLICK_MS) {
+                                        editor.renamingGroup = group.id
+                                        lastHeaderPressMillis = 0L
+                                    } else {
+                                        lastHeaderPressMillis = now
+                                    }
+                                }
+                                RIGHT_BUTTON -> {
+                                    // Right-click on header → open group context menu.
+                                    if (canvas != null) {
+                                        val worldX = (bbox.minX - pad) + x
+                                        val worldY = (bbox.minY - pad - GROUP_HEADER_HEIGHT) + y
+                                        val screenX = ((worldX + canvas.panX) * canvas.zoom).toInt()
+                                        val screenY = ((worldY + canvas.panY) * canvas.zoom).toInt()
+                                        editor.openGroupMenu(screenX, screenY, group.id)
+                                    }
+                                }
                             }
                             true
                         }
@@ -112,5 +129,7 @@ fun GroupFrame(group: Group) {
     }
 }
 
-private const val HEADER_HEIGHT = 14
+internal const val GROUP_HEADER_HEIGHT = 14
 private const val RIGHT_BUTTON = 1
+private const val LEFT_BUTTON = 0
+private const val DOUBLE_CLICK_MS = 300L

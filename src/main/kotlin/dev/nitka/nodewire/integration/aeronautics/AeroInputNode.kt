@@ -45,7 +45,7 @@ object AeroInputNode {
 
     val AERONAUTICS_INPUT: NodeType = NodeType(
         id = ResourceLocation.fromNamespaceAndPath(Nodewire.ID, "aeronautics_input"),
-        displayName = "Aeronautics Input",
+        displayName = "✈ Aeronautics Input",
         category = NodeCategory.IO,
         inputs = emptyList(),
         outputs = listOf(Pin("out", "Out", PinType.FLOAT)),

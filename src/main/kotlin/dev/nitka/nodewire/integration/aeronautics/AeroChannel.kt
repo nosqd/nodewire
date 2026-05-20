@@ -21,6 +21,18 @@ enum class AeroChannel(
     val kind: AeroBlockKind,
     val displayName: String,
     val pinType: PinType,
+    /**
+     * `true` means the BE exposes an effective external write path (a
+     * setter that isn't immediately overwritten by the next tick). For
+     * Aeronautics 1.2.1 only redstone-strength-style fields qualify —
+     * the rest are kinetic-network driven or computed and any write
+     * would be undone on the next tick.
+     *
+     * Surfaced in the channel picker UI as a 🔓 / 🔒 badge so the user
+     * knows up-front which bindings could power a hypothetical
+     * Aeronautics Output node.
+     */
+    val writable: Boolean = false,
 ) {
     // --- Propeller family (Andesite / Wooden / Smart all extend
     // BasePropellerBlockEntity which exposes: public field rotationSpeed,
@@ -88,7 +100,7 @@ enum class AeroChannel(
     BURNER_POWERED(AeroBlockKind.HOT_AIR_BURNER, "Powered", PinType.BOOL) {
         override fun read(be: BlockEntity): PinValue = PinValue.Bool(R.bool(be, "powered"))
     },
-    BURNER_SIGNAL(AeroBlockKind.HOT_AIR_BURNER, "Signal", PinType.REDSTONE) {
+    BURNER_SIGNAL(AeroBlockKind.HOT_AIR_BURNER, "Signal", PinType.REDSTONE, writable = true) {
         override fun read(be: BlockEntity): PinValue = PinValue.Redstone(R.int(be, "signalStrength"))
     },
     BURNER_GAS_OUTPUT(AeroBlockKind.HOT_AIR_BURNER, "Gas output", PinType.FLOAT) {
@@ -103,7 +115,7 @@ enum class AeroChannel(
 
     // --- Steam Vent: public `signalStrength: int`, public `rawSignalStrength: int`,
     //     public getGasOutput, canOutputGas, getClientPredictedVolume ---
-    VENT_SIGNAL(AeroBlockKind.STEAM_VENT, "Signal", PinType.REDSTONE) {
+    VENT_SIGNAL(AeroBlockKind.STEAM_VENT, "Signal", PinType.REDSTONE, writable = true) {
         override fun read(be: BlockEntity): PinValue = PinValue.Redstone(R.int(be, "signalStrength"))
     },
     VENT_RAW_SIGNAL(AeroBlockKind.STEAM_VENT, "Raw signal", PinType.REDSTONE) {

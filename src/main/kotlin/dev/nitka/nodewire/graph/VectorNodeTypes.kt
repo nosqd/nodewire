@@ -19,7 +19,7 @@ object VectorNodeTypes {
 
     val VEC_MAKE = NodeType(
         id = ResourceLocation.fromNamespaceAndPath(Nodewire.ID, "vec_make"),
-        displayName = "Vec Make",
+        displayName = "🧩 Vec Make",
         category = NodeCategory.VECTOR,
         inputs = listOf(
             Pin("x", "X", PinType.FLOAT),
@@ -33,7 +33,7 @@ object VectorNodeTypes {
 
     val VEC_SPLIT = NodeType(
         id = ResourceLocation.fromNamespaceAndPath(Nodewire.ID, "vec_split"),
-        displayName = "Vec Split",
+        displayName = "✂ Vec Split",
         category = NodeCategory.VECTOR,
         inputs = listOf(Pin("in", "In", PinType.VEC2)),
         outputs = listOf(
@@ -47,7 +47,7 @@ object VectorNodeTypes {
 
     val VEC_OP = NodeType(
         id = ResourceLocation.fromNamespaceAndPath(Nodewire.ID, "vec_op"),
-        displayName = "Vec Op",
+        displayName = "➡ Vec Op",
         category = NodeCategory.VECTOR,
         // Default op = ADD on VEC2 → two Vec2 inputs, one Vec2 output.
         inputs = listOf(

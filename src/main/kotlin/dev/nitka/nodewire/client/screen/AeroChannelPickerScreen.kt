@@ -138,6 +138,14 @@ private fun AeroChannelRow(channel: AeroChannel, onClick: () -> Unit) {
             channel.pinType.name.lowercase(),
             style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
         )
+        // RO / RW indicator — 🔓 means an external write would actually
+        // stick (setter exists AND tick() doesn't overwrite); 🔒 means
+        // the value is read-only because it's kinetic-network-driven or
+        // computed every tick.
+        Text(
+            if (channel.writable) "🔓 rw" else "🔒 ro",
+            style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+        )
     }
 }
 

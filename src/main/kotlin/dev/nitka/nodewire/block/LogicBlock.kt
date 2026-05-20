@@ -51,9 +51,12 @@ class LogicBlock(props: BlockBehaviour.Properties) : Block(props), EntityBlock {
     override fun isSignalSource(state: BlockState): Boolean = true
 
     /**
-     * Power on the face that the redstone read is querying. `direction` is
-     * the direction the signal is going (= our face that emits). Reads
-     * the BE's cached per-face output map populated by the last tick.
+     * Power on the face that vanilla is querying. `direction` is the
+     * direction **from the querying neighbour towards us** (see
+     * [SignalGetter.getBestNeighborSignal]: `getSignal(pos.relative(d), d)`),
+     * so the face of ours that actually emits toward that neighbour is
+     * `direction.opposite`. Reads the BE's cached per-face output map
+     * populated by the last tick — keyed by the user-facing emitting face.
      */
     override fun getSignal(
         state: BlockState,
@@ -62,7 +65,7 @@ class LogicBlock(props: BlockBehaviour.Properties) : Block(props), EntityBlock {
         direction: Direction,
     ): Int {
         val be = level.getBlockEntity(pos) as? LogicBlockEntity ?: return 0
-        return be.faceOutputs[direction] ?: 0
+        return be.faceOutputs[direction.opposite] ?: 0
     }
 
     /** Same value for direct (= strong) signal — we don't distinguish for now. */

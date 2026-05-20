@@ -22,6 +22,8 @@ import dev.nitka.nodewire.ui.layout.PaddingValues
 import dev.nitka.nodewire.ui.layout.Row
 import dev.nitka.nodewire.ui.modifier.input.pointerInput
 import dev.nitka.nodewire.ui.modifier.layout.absolutePosition
+import dev.nitka.nodewire.ui.modifier.layout.fillMaxWidth
+import dev.nitka.nodewire.ui.modifier.layout.padding
 import dev.nitka.nodewire.ui.modifier.layout.size
 import dev.nitka.nodewire.ui.modifier.style.background
 import dev.nitka.nodewire.ui.modifier.style.border
@@ -58,12 +60,18 @@ fun GroupFrame(group: Group) {
     val h = (bbox.maxY - bbox.minY).toInt() + pad * 2 + GROUP_HEADER_HEIGHT
     var lastHeaderPressMillis by remember { mutableStateOf(0L) }
 
+    val selected = editor.isGroupSelected(group.id)
+    val borderColor = if (selected) NwTheme.colors.accent else NwTheme.colors.border
+    val borderWidth = if (selected) 2 else 1
     Box(
         modifier = Modifier
             .absolutePosition((bbox.minX - pad).toInt(), (bbox.minY - pad - GROUP_HEADER_HEIGHT).toInt())
             .size(w, h)
-            .background(NwTheme.colors.surfaceHover)
-            .border(BorderStroke(1, NwTheme.colors.border), NwTheme.shapes.medium),
+            // Semi-transparent so member nodes underneath stay legible.
+            // Header pill (drawn next, opaque) provides clear visual
+            // separation between drag-handle area and member region.
+            .background(NwTheme.colors.surfaceHover.copy(alpha = 0.90f))
+            .border(BorderStroke(borderWidth, borderColor), NwTheme.shapes.medium),
     ) {
         Surface(
             modifier = Modifier
@@ -72,18 +80,53 @@ fun GroupFrame(group: Group) {
                     when (ev) {
                         is PointerEvent.Drag -> {
                             val zoom = canvas?.zoom ?: 1f
-                            editor.moveGroup(group.id, ev.deltaX / zoom, ev.deltaY / zoom)
+                            val dxW = ev.deltaX / zoom
+                            val dyW = ev.deltaY / zoom
+                            // Same rule as NodeCard/CommentCard: if this item
+                            // is in the selection, the drag moves the whole
+                            // selection uniformly; otherwise fall back to a
+                            // single-group move.
+                            if (editor.isGroupSelected(group.id)) {
+                                editor.moveSelected(dxW, dyW)
+                            } else {
+                                editor.moveGroup(group.id, dxW, dyW)
+                            }
                             true
                         }
                         is PointerEvent.Press -> {
                             when (ev.button) {
                                 LEFT_BUTTON -> {
-                                    // LMB double-click on header → start rename.
+                                    val shift = net.minecraft.client.gui.screens.Screen
+                                        .hasShiftDown()
                                     val now = System.currentTimeMillis()
-                                    if (now - lastHeaderPressMillis < DOUBLE_CLICK_MS) {
+                                    val isDoubleClick =
+                                        now - lastHeaderPressMillis < DOUBLE_CLICK_MS
+                                    if (isDoubleClick) {
+                                        // Quick second LMB → rename (overrides
+                                        // selection — feels natural since user
+                                        // is acting on this group specifically).
                                         editor.renamingGroup = group.id
                                         lastHeaderPressMillis = 0L
                                     } else {
+                                        // First press → handle selection like
+                                        // a node. Plain LMB replaces selection
+                                        // with just this group; Shift+LMB adds
+                                        // (or removes) it. Drag handler stays
+                                        // active so the same press can also
+                                        // initiate a move.
+                                        if (shift) {
+                                            editor.toggleGroupSelection(group.id)
+                                        } else if (!editor.isGroupSelected(group.id)) {
+                                            // Plain LMB on an *unselected*
+                                            // group replaces the selection.
+                                            // If already selected, leave the
+                                            // selection intact so the drag
+                                            // that follows moves every
+                                            // selected item uniformly
+                                            // (same rule as NodeCard).
+                                            editor.clearSelection()
+                                            editor.toggleGroupSelection(group.id)
+                                        }
                                         lastHeaderPressMillis = now
                                     }
                                 }
@@ -114,18 +157,55 @@ fun GroupFrame(group: Group) {
             ),
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Center,
-                horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space4),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(group.name, style = NwTheme.typography.caption)
-                if (group.templateFile != null) {
+                Row(
+                    verticalAlignment = Alignment.Center,
+                    horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space4),
+                ) {
                     Text(
-                        "↪${group.templateFile}",
-                        style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+                        group.name.ifBlank { "Group" },
+                        style = NwTheme.typography.caption,
                     )
+                    if (group.templateFile != null) {
+                        Text(
+                            "↪${group.templateFile}",
+                            style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+                        )
+                    }
                 }
+                CollapseToggleButton(group.id, "−")
             }
         }
+    }
+}
+
+/**
+ * Small "−" / "+" pill in the group header strip. Press toggles the
+ * group's collapsed state. The button consumes Press so the surrounding
+ * header doesn't fire its own drag / rename / context-menu handlers.
+ */
+@Composable
+internal fun CollapseToggleButton(groupId: GroupId, glyph: String) {
+    val editor = LocalEditorState.current ?: return
+    Surface(
+        modifier = Modifier
+            .pointerInput { ev, _, _ ->
+                if (ev is PointerEvent.Press && ev.button == LEFT_BUTTON) {
+                    editor.toggleCollapsed(groupId)
+                    true
+                } else false
+            },
+        style = SurfaceStyle(
+            color = NwTheme.colors.surfaceHover,
+            shape = NwTheme.shapes.small,
+            border = null,
+            padding = PaddingValues(horizontal = NwTheme.dimens.space4, vertical = 0),
+        ),
+    ) {
+        Text(glyph, style = NwTheme.typography.caption)
     }
 }
 

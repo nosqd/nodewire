@@ -74,14 +74,15 @@ neoForge {
             client()
             systemProperty("forge.logging.markers", "REGISTRIES")
             systemProperty("forge.logging.console.level", "debug")
-            // KFF's plugin layer loads kotlin.stdlib and kotlinx.coroutines.core as
-            // distinct modules. The stdlib's DebugProbesKt.probeCoroutineCreated hardcodes
-            // a call into kotlinx.coroutines.debug.internal.DebugProbesImpl that needs a
-            // `reads` edge the stdlib's module-info doesn't declare → IllegalAccessError
-            // on every `launch {}`. A JVM `--add-reads` flag would work on the boot layer
-            // but doesn't reach KFF's child layer; we add the edge programmatically via
-            // Module.implAddReads in JpmsBridge instead, which needs java.base/java.lang
-            // open for setAccessible to succeed.
+            // IDE-attached coroutines-debug agent retransforms kotlin.stdlib's
+            // DebugProbesKt so it dispatches into kotlinx.coroutines.debug.internal
+            // .DebugProbesImpl. Both live in KFF's PLUGIN layer as separate JPMS
+            // modules; stdlib's module-info doesn't `requires` coroutines, so any
+            // `launch{}` throws IllegalAccessError. JpmsBridge adds the reads edge
+            // reflectively from an UNNAMED-module helper class; we just need
+            // java.base/java.lang open to ALL-UNNAMED for setAccessible to pass.
+            // The named-module flavor (`=nodewire`) is silently ignored anyway
+            // because nodewire isn't in the boot layer at JVM startup.
             jvmArguments.add("--add-opens=java.base/java.lang=ALL-UNNAMED")
         }
         register("server") {
@@ -162,7 +163,7 @@ dependencies {
     // CurseForge), so we pull from Modrinth instead. Aircraft built by
     // Aeronautics ARE Sable sub-levels, so they're already claimed
     // transparently by SableSubLevelBackend — no additional backend code
-    // needed for v1. The dep is kept compileOnly + runtimeOnly so we can
+    // needed for v1. The dep isr kept compileOnly + runtimeOnly so we can
     // call into Aeronautics-specific APIs later (signal sources on
     // aircraft, propeller hooks, etc.) without making it a hard dep.
     compileOnly("maven.modrinth:create-aeronautics:1.2.1+mc1.21.1")

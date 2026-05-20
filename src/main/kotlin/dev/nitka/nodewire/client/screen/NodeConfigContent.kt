@@ -759,7 +759,8 @@ object NodeConfigContent {
             }
             LabeledRow("Output") {
                 Text(
-                    channel.pinType.name.lowercase(),
+                    channel.pinType.name.lowercase() +
+                        if (channel.writable) "  🔓 rw" else "  🔒 ro",
                     style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
                 )
             }

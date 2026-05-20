@@ -270,6 +270,7 @@ class NodeEditorScreen(val pos: BlockPos, initialGraph: NodeGraph) :
                             NodeCard(nodeId = id)
                         }
                         NodeLabelOverlay()
+                        GroupLabelOverlay()
                         // Rubber-band rect on top of everything inside the
                         // canvas pose, so it pans/zooms with the world.
                         SelectionRect()

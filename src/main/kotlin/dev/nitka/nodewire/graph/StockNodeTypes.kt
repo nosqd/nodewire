@@ -327,6 +327,89 @@ object StockNodeTypes {
         tickEvaluator = StockEvaluators.DelayTick,
     )
 
+    val SAMPLE_HOLD = nodeType(
+        id = "sample_hold",
+        displayName = "📷 Sample & Hold",
+        category = NodeCategory.FLOW,
+        inputs = listOf(
+            Pin("value", "Value", PinType.ANY),
+            Pin("trigger", "Trigger", PinType.BOOL),
+        ),
+        outputs = listOf(Pin("out", "Out", PinType.ANY)),
+        tickEvaluator = StockEvaluators.SampleHold,
+    )
+
+    val LATCH_SR = nodeType(
+        id = "latch_sr",
+        displayName = "🔒 Latch SR",
+        category = NodeCategory.FLOW,
+        inputs = listOf(
+            Pin("set", "Set", PinType.BOOL),
+            Pin("reset", "Reset", PinType.BOOL),
+        ),
+        outputs = listOf(Pin("out", "Out", PinType.BOOL)),
+        tickEvaluator = StockEvaluators.LatchSr,
+    )
+
+    val LATCH_D = nodeType(
+        id = "latch_d",
+        displayName = "📌 Latch D",
+        category = NodeCategory.FLOW,
+        inputs = listOf(
+            Pin("data", "Data", PinType.ANY),
+            Pin("clock", "Clock", PinType.BOOL),
+        ),
+        outputs = listOf(Pin("out", "Out", PinType.ANY)),
+        tickEvaluator = StockEvaluators.LatchD,
+    )
+
+    val SEQUENCER = nodeType(
+        id = "sequencer",
+        displayName = "🎼 Sequencer",
+        category = NodeCategory.FLOW,
+        inputs = listOf(
+            Pin("advance", "Advance", PinType.BOOL),
+            Pin("reset", "Reset", PinType.BOOL),
+        ),
+        outputs = listOf(Pin("step", "Step", PinType.INT)),
+        defaultConfig = { CompoundTag().apply { putInt("steps", 4) } },
+        configContent = dev.nitka.nodewire.client.screen.NodeConfigContent.SequencerSteps,
+        tickEvaluator = StockEvaluators.Sequencer,
+    )
+
+    val SMOOTH = nodeType(
+        id = "smooth",
+        displayName = "🌫 Smooth",
+        category = NodeCategory.MATH,
+        inputs = listOf(
+            Pin("target", "Target", PinType.FLOAT),
+            Pin("factor", "Factor", PinType.FLOAT),
+        ),
+        outputs = listOf(Pin("out", "Out", PinType.FLOAT)),
+        tickEvaluator = StockEvaluators.Smooth,
+    )
+
+    val PID = nodeType(
+        id = "pid",
+        displayName = "🎯 PID",
+        category = NodeCategory.MATH,
+        inputs = listOf(
+            Pin("setpoint", "Setpoint", PinType.FLOAT),
+            Pin("measurement", "Measurement", PinType.FLOAT),
+            Pin("kp", "Kp", PinType.FLOAT),
+            Pin("ki", "Ki", PinType.FLOAT),
+            Pin("kd", "Kd", PinType.FLOAT),
+        ),
+        outputs = listOf(Pin("out", "Out", PinType.FLOAT)),
+        defaultConfig = {
+            CompoundTag().apply {
+                putFloat("i_min", -1000f)
+                putFloat("i_max", 1000f)
+            }
+        },
+        tickEvaluator = StockEvaluators.Pid,
+    )
+
     // --- Test / Generators --------------------------------------------
 
     val RANDOM_BOOL = nodeType(
@@ -371,11 +454,12 @@ object StockNodeTypes {
             // Constants
             CONSTANT, TIMER,
             // Math
-            MATH, COMPARE, CLAMP, MAP, LERP,
+            MATH, COMPARE, CLAMP, MAP, LERP, SMOOTH, PID,
             // Conversion
             CONVERT,
             // Flow
             SELECT_BOOL, IF_THEN_ELSE, SWITCH, EDGE_RISING, TOGGLE, COUNTER, DELAY,
+            SAMPLE_HOLD, LATCH_SR, LATCH_D, SEQUENCER,
             // Test / Generators
             RANDOM_BOOL, RANDOM_INT, PULSE,
         ).forEach(NodeTypeRegistry::register)

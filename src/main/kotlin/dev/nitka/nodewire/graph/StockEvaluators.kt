@@ -466,6 +466,117 @@ object StockEvaluators {
         return list
     }
 
+    // --- Stateful algo nodes (sample/hold, latches, sequencer, smooth, pid) --
+
+    /**
+     * SampleHold: captures `value` on a rising edge of `trigger`. Holds
+     * across subsequent ticks until the next rising edge. State stores
+     * the held PinValue via PinValue.CODEC + the last trigger boolean.
+     */
+    val SampleHold: TickEvaluator = { state, _, inputs ->
+        val rawValue = inputs["value"] ?: PinValue.Bool(false)
+        val trig = (inputs["trigger"] as? PinValue.Bool)?.value ?: false
+        val wasTrig = state.getBoolean("lt")
+        if (trig && !wasTrig) {
+            PinValue.CODEC.encodeStart(net.minecraft.nbt.NbtOps.INSTANCE, rawValue)
+                .result().ifPresent { state.put("v", it) }
+        }
+        state.putBoolean("lt", trig)
+        val held = state.get("v")
+            ?.let { PinValue.CODEC.parse(net.minecraft.nbt.NbtOps.INSTANCE, it).result().orElse(null) }
+            ?: PinValue.Bool(false)
+        mapOf("out" to held)
+    }
+
+    /** SR latch: set→true, reset→false, both→reset wins, neither→hold. */
+    val LatchSr: TickEvaluator = { state, _, inputs ->
+        val set = (inputs["set"] as? PinValue.Bool)?.value ?: false
+        val reset = (inputs["reset"] as? PinValue.Bool)?.value ?: false
+        var v = state.getBoolean("v")
+        when {
+            reset -> v = false
+            set -> v = true
+        }
+        state.putBoolean("v", v)
+        mapOf("out" to PinValue.Bool(v))
+    }
+
+    /**
+     * D latch: on rising edge of clock, capture data. Otherwise hold.
+     * Stores the held PinValue via PinValue.CODEC.
+     */
+    val LatchD: TickEvaluator = { state, _, inputs ->
+        val data = inputs["data"] ?: PinValue.Bool(false)
+        val clock = (inputs["clock"] as? PinValue.Bool)?.value ?: false
+        val wasClock = state.getBoolean("lc")
+        if (clock && !wasClock) {
+            PinValue.CODEC.encodeStart(net.minecraft.nbt.NbtOps.INSTANCE, data)
+                .result().ifPresent { state.put("v", it) }
+        }
+        state.putBoolean("lc", clock)
+        val held = state.get("v")
+            ?.let { PinValue.CODEC.parse(net.minecraft.nbt.NbtOps.INSTANCE, it).result().orElse(null) }
+            ?: PinValue.Bool(false)
+        mapOf("out" to held)
+    }
+
+    /** Sequencer: advances step on rising edge of `advance`, wraps mod N, reset → 0. */
+    val Sequencer: TickEvaluator = { state, config, inputs ->
+        val steps = config.getInt("steps").coerceIn(2, 16)
+        val advance = (inputs["advance"] as? PinValue.Bool)?.value ?: false
+        val reset = (inputs["reset"] as? PinValue.Bool)?.value ?: false
+        val wasAdvance = state.getBoolean("la")
+        var step = state.getInt("s")
+        when {
+            reset -> step = 0
+            advance && !wasAdvance -> step = (step + 1) % steps
+        }
+        state.putInt("s", step)
+        state.putBoolean("la", advance)
+        mapOf("step" to PinValue.Int(step))
+    }
+
+    /**
+     * Smooth: low-pass filter. current = current + (target - current) * factor.
+     * First tick initialises current to target (no ramp from 0).
+     */
+    val Smooth: TickEvaluator = { state, _, inputs ->
+        val target = (inputs["target"] as? PinValue.Float)?.value ?: 0f
+        val factor = ((inputs["factor"] as? PinValue.Float)?.value ?: 0.5f).coerceIn(0f, 1f)
+        val initialised = state.getBoolean("init")
+        var current = if (initialised) state.getFloat("c") else target
+        current = current + (target - current) * factor
+        state.putBoolean("init", true)
+        state.putFloat("c", current)
+        mapOf("out" to PinValue.Float(current))
+    }
+
+    /**
+     * PID controller: emits kp*err + ki*integral + kd*derivative. Integral
+     * clamped per-config (default ±1000) to prevent wind-up. Time step is
+     * implicit (one tick = 1 unit) — user tunes ki/kd accordingly.
+     */
+    val Pid: TickEvaluator = { state, config, inputs ->
+        val setpoint = (inputs["setpoint"] as? PinValue.Float)?.value ?: 0f
+        val measurement = (inputs["measurement"] as? PinValue.Float)?.value ?: 0f
+        val kp = (inputs["kp"] as? PinValue.Float)?.value ?: 1f
+        val ki = (inputs["ki"] as? PinValue.Float)?.value ?: 0f
+        val kd = (inputs["kd"] as? PinValue.Float)?.value ?: 0f
+        // 0f from a missing config key shouldn't disable the clamp entirely;
+        // treat 0 as "use the default range" here.
+        val iMin = config.getFloat("i_min").let { if (it == 0f) -1000f else it }
+        val iMax = config.getFloat("i_max").let { if (it == 0f) 1000f else it }
+        val error = setpoint - measurement
+        var integral = state.getFloat("i") + error
+        integral = integral.coerceIn(iMin, iMax)
+        val lastError = state.getFloat("le")
+        val derivative = error - lastError
+        state.putFloat("i", integral)
+        state.putFloat("le", error)
+        val out = kp * error + ki * integral + kd * derivative
+        mapOf("out" to PinValue.Float(out))
+    }
+
     // --- helpers --------------------------------------------------------
 
     private fun boolIn(inputs: Map<String, PinValue>, pin: String): Boolean =

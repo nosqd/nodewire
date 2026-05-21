@@ -930,4 +930,36 @@ object NodeConfigContent {
             }
         }
     }
+
+    /**
+     * Sequencer: row of 2/4/8/16 step-count selector buttons. Active count
+     * is shown disabled. Clicking another count writes `steps` into the
+     * node config.
+     */
+    val SequencerSteps: @Composable (dev.nitka.nodewire.graph.Node) -> Unit = { node ->
+        val editor = LocalEditorState.current
+        val current = node.config.getInt("steps").coerceIn(2, 16)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Center,
+            horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space2),
+        ) {
+            Text(
+                "Steps:",
+                style = NwTheme.typography.caption.copy(color = NwTheme.colors.onSurfaceMuted),
+            )
+            for (n in listOf(2, 4, 8, 16)) {
+                Button(
+                    onClick = {
+                        editor?.updateNode(node.id) { n2 ->
+                            n2.copy(config = n2.config.copy().apply { putInt("steps", n) })
+                        }
+                    },
+                    enabled = n != current,
+                ) {
+                    Text(n.toString())
+                }
+            }
+        }
+    }
 }

@@ -229,6 +229,19 @@ object StockNodeTypes {
         evaluate = StockEvaluators.SelectBool,
     )
 
+    val IF_THEN_ELSE = nodeType(
+        id = "if_then_else",
+        displayName = "❓ If Then Else",
+        category = NodeCategory.FLOW,
+        inputs = listOf(
+            Pin("cond", "Cond", PinType.BOOL),
+            Pin("then", "Then", PinType.ANY),
+            Pin("else_", "Else", PinType.ANY),
+        ),
+        outputs = listOf(Pin("out", "Out", PinType.ANY)),
+        evaluate = StockEvaluators.IfThenElse,
+    )
+
     val EDGE_RISING = nodeType(
         id = "edge_rising", displayName = "📈 Rising Edge", category = NodeCategory.FLOW,
         inputs = listOf(Pin("in", "In", PinType.BOOL)),
@@ -310,7 +323,7 @@ object StockNodeTypes {
             // Conversion
             CONVERT,
             // Flow
-            SELECT_BOOL, EDGE_RISING, TOGGLE, COUNTER, DELAY,
+            SELECT_BOOL, IF_THEN_ELSE, EDGE_RISING, TOGGLE, COUNTER, DELAY,
             // Test / Generators
             RANDOM_BOOL, RANDOM_INT, PULSE,
         ).forEach(NodeTypeRegistry::register)

@@ -391,6 +391,18 @@ object StockEvaluators {
     }
     val Pulse: NodeEvaluator = { _, _ -> mapOf("out" to PinValue.Bool(false)) }
 
+    /**
+     * IfThenElse: cond:BOOL + then:ANY + else_:ANY → out:ANY. Selects
+     * one of two PinValues unchanged. ANY in/out means no conversion —
+     * the framework passes both branches as-is; the picked branch
+     * propagates verbatim.
+     */
+    val IfThenElse: NodeEvaluator = { _, inputs ->
+        val cond = (inputs["cond"] as? PinValue.Bool)?.value ?: false
+        val chosen = if (cond) inputs["then"] else inputs["else_"]
+        mapOf("out" to (chosen ?: PinValue.Bool(false)))
+    }
+
     // --- helpers --------------------------------------------------------
 
     private fun boolIn(inputs: Map<String, PinValue>, pin: String): Boolean =

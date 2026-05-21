@@ -61,6 +61,11 @@ sealed class PinValue {
             PinType.VEC2 -> Vec2(0f, 0f)
             PinType.VEC3 -> Vec3(0f, 0f, 0f)
             PinType.QUAT -> Quat(0f, 0f, 0f, 1f)
+            // ANY has no canonical value — Bool(false) is the cheapest
+            // no-signal placeholder. Callers should usually avoid asking
+            // for default(ANY); the framework treats unconnected ANY-pins
+            // as "use the type from whatever IS connected".
+            PinType.ANY -> Bool(false)
         }
 
         // ── Per-variant codecs ────────────────────────────────────────

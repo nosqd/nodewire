@@ -23,7 +23,15 @@ enum class PinType {
     STRING,
     VEC2,
     VEC3,
-    QUAT;
+    QUAT,
+    /**
+     * Generic — accepts a connection from any other pin type. Carries
+     * the raw [PinValue] through the evaluator unchanged. The connect-UI
+     * never rejects an ANY-end edge. See PinValueConversion (added in
+     * Task 2) for the implicit-conversion rules used everywhere ANY is
+     * NOT involved.
+     */
+    ANY;
 
     companion object {
         /** Defensive lookup — falls back to [BOOL] if the saved key is unknown (forward-compat load). */

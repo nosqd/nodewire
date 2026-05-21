@@ -39,6 +39,7 @@ object NwChannelLuaCodec {
             asFiniteNumber(lua, "redstone").toInt().coerceIn(0, 15)
         )
         PinType.STRING   -> PinValue.Str(asString(lua, "string"))
+        PinType.ANY      -> error("ANY should never appear as a CC channel pin type")
         PinType.VEC2     -> {
             val m = asMap(lua, "vec2")
             PinValue.Vec2(

@@ -489,6 +489,10 @@ private fun pinColor(type: PinType): Color = when (type) {
     PinType.VEC2 -> NwTheme.colors.pinVec2
     PinType.VEC3 -> NwTheme.colors.pinVec3
     PinType.QUAT -> NwTheme.colors.pinQuat
+    // ANY pins render in a neutral muted color — they have no canonical
+    // type-color since they accept anything; see Task 4 for the dedicated
+    // ANY-pin rendering treatment.
+    PinType.ANY -> NwTheme.colors.onSurfaceMuted
 }
 
 /**

@@ -57,9 +57,6 @@ fun WireLayer() {
             PinType.QUAT to c.pinQuat,
         )
     }
-    val labelBg = NwTheme.colors.surface
-    val labelBorder = NwTheme.colors.border
-    val labelText = NwTheme.colors.onSurface
     val edges by editor.edges.collectAsState()
     // Nodes hidden because they belong to a currently-collapsed group.
     // Re-computed on every change to the groups flow.
@@ -67,8 +64,8 @@ fun WireLayer() {
     val hidden = remember(groupsValue) {
         if (groupsValue.isEmpty()) emptySet() else hiddenNodesFor(editor)
     }
-    val renderer = remember(editor, pinColors, labelBg, labelBorder, labelText) {
-        WireRenderer(editor, pinColors, labelBg, labelBorder, labelText)
+    val renderer = remember(editor, pinColors) {
+        WireRenderer(editor, pinColors)
     }
     renderer.edges = edges
     renderer.hiddenNodes = hidden
@@ -76,49 +73,11 @@ fun WireLayer() {
         modifier = Modifier.absolutePosition(0, 0).fillMaxSize(),
         renderer = renderer,
     )
-    // Transparent hit overlay. Pressing within HIT_RADIUS world units of
-    // any edge's midpoint sets `renamingEdge` — the overlay UI then
-    // shows an inline TextInput.
-    val edgesState = edges  // already captured via collectAsState above
-    Layout(
-        modifier = Modifier
-            .absolutePosition(0, 0)
-            .fillMaxSize()
-            .pointerInput { ev, x, y ->
-                if (ev !is dev.nitka.nodewire.ui.input.PointerEvent.Press) return@pointerInput false
-                if (ev.button != 0) return@pointerInput false  // LMB only
-                val positions = editor.pinPositions
-                for (e in edgesState) {
-                    val from = positions.get(PinKey(e.from.node, e.from.pin, PinSide.Output)) ?: continue
-                    val to = positions.get(PinKey(e.to.node, e.to.pin, PinSide.Input)) ?: continue
-                    val midX = (from.first + to.first) * 0.5f
-                    val midY = (from.second + to.second) * 0.5f
-                    val dx = x.toFloat() - midX
-                    val dy = y.toFloat() - midY
-                    if (dx * dx + dy * dy < HIT_RADIUS_SQ) {
-                        editor.renamingEdge = e
-                        return@pointerInput true
-                    }
-                }
-                false
-            },
-        renderer = NoopRenderer,
-    )
-}
-
-private const val HIT_RADIUS = 8f
-private const val HIT_RADIUS_SQ = HIT_RADIUS * HIT_RADIUS
-
-private object NoopRenderer : dev.nitka.nodewire.ui.render.Renderer {
-    override fun dev.nitka.nodewire.ui.render.NwCanvas.render(node: dev.nitka.nodewire.ui.core.UiNode) { /* invisible */ }
 }
 
 private class WireRenderer(
     private val editor: EditorState,
     private val pinColors: Map<PinType, Color>,
-    private val labelBg: Color,
-    private val labelBorder: Color,
-    private val labelText: Color,
 ) : Renderer {
 
     var edges: List<dev.nitka.nodewire.graph.Edge> = emptyList()
@@ -155,15 +114,6 @@ private class WireRenderer(
             val pinType = fromNode.outputs.firstOrNull { it.id == edge.from.pin }?.type ?: continue
             val color = pinColors[pinType] ?: continue
             drawBezier(from.first, from.second, to.first, to.second, color)
-            val label = edge.label
-            if (!label.isNullOrBlank()) {
-                val midX = ((from.first + to.first) * 0.5f).toInt()
-                val midY = ((from.second + to.second) * 0.5f).toInt()
-                val textW = font.width(label)
-                // No background fill / border — text floats above the wire,
-                // tight to its own width.
-                drawText(label, midX - textW / 2, midY - font.lineHeight / 2, labelText)
-            }
         }
         // Rubber-band wire: shown while a wire drag is in progress, from
         // either an output or an input pin. Drawn last so it stays on top

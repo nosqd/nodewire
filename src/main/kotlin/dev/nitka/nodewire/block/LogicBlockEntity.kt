@@ -448,6 +448,33 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
                 .currentValues.set(prevAero)
         }
 
+        // CC: Tweaked event dispatch — skip everything if the mod isn't
+        // present so the BE class loads cleanly on CC-less servers.
+        if (net.neoforged.fml.ModList.get().isLoaded("computercraft") &&
+            nwAttachedPeripheralsView().isNotEmpty()) {
+            val newSnap = dev.nitka.nodewire.integration.cctweaked
+                .NwChannelIntrospection.outputSnapshot(graph, result)
+            // Build the attachments list as Lua-typed pairs. We hop
+            // through `Any` in the BE field to keep CC API types out of
+            // the BE compile scope; cast back here behind the ModList
+            // gate where it's safe.
+            val attachments = nwAttachedPeripheralsView().flatMap { p ->
+                val peripheral = p as dev.nitka.nodewire.integration.cctweaked.NodewirePeripheral
+                peripheral.attachmentsSnapshot()
+            }
+            dev.nitka.nodewire.integration.cctweaked.NwChannelEventDispatch
+                .diffAndBroadcast(attachments, prev = nwChannelOutputSnapshotView(), new = newSnap)
+            // Clear all per-attach initial-sync flags now that they've
+            // fired at least once.
+            for (p in nwAttachedPeripheralsView()) {
+                val peripheral = p as dev.nitka.nodewire.integration.cctweaked.NodewirePeripheral
+                for ((computer, _) in peripheral.attachmentsSnapshot()) {
+                    peripheral.clearInitialSync(computer)
+                }
+            }
+            nwUpdateChannelOutputSnapshot(newSnap)
+        }
+
         if (ModList.get().isLoaded("create")) {
             syncRedstoneLinkables(level, result)
         }
@@ -668,6 +695,51 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
         val srcType = PinType.fromName(srcNode.config.getString("type"))
         val tgtType = PinType.fromName(tgtNode.config.getString("type"))
         return srcType != tgtType
+    }
+
+    // ── CC: Tweaked attached-peripheral tracking ──────────────────────────
+    // Stored as Any so the BE class doesn't reference CC API types
+    // directly — that way it loads cleanly when CC: Tweaked is absent.
+    // Cast back to NodewirePeripheral happens only behind a ModList gate
+    // (see serverTick wiring in Task 9). Mutated only from the server
+    // thread; CC dispatches on its own executor but trampolines via
+    // Capabilities → server tick task queue.
+    @Transient
+    private val nwAttachedPeripherals: MutableSet<Any> = HashSet()
+
+    /** Called from `NodewirePeripheral.attach`. Idempotent. */
+    fun nwAttachPeripheral(p: Any) { nwAttachedPeripherals.add(p) }
+
+    /** Called from `NodewirePeripheral.detach` when the last computer leaves. */
+    fun nwDetachPeripheral(p: Any) { nwAttachedPeripherals.remove(p) }
+
+    /** Read-only view used by [serverTick]'s CC dispatch step (added in T9). */
+    internal fun nwAttachedPeripheralsView(): Set<Any> = nwAttachedPeripherals
+
+    /**
+     * Last-tick snapshot of `channel_output` values, keyed by channel
+     * name. Updated end-of-tick by the CC integration; consulted from
+     * Lua [dev.nitka.nodewire.integration.cctweaked.NodewirePeripheral.getChannel].
+     */
+    @Transient
+    private var nwChannelOutputSnapshot: Map<String, dev.nitka.nodewire.graph.PinValue> = emptyMap()
+
+    internal fun nwChannelOutputSnapshotView(): Map<String, dev.nitka.nodewire.graph.PinValue> =
+        nwChannelOutputSnapshot
+
+    internal fun nwUpdateChannelOutputSnapshot(snap: Map<String, dev.nitka.nodewire.graph.PinValue>) {
+        nwChannelOutputSnapshot = snap
+    }
+
+    /**
+     * Write to a `channel_input`-fed external. Same map the cross-block
+     * channel bindings use, so a Lua writer and another BE writer
+     * compete on a last-writer-wins basis (which is the existing
+     * channel-binding behaviour).
+     */
+    internal fun nwWriteChannelInput(name: String, value: dev.nitka.nodewire.graph.PinValue) {
+        externalChannelInputs[name] = value
+        setChanged()
     }
 
     companion object {

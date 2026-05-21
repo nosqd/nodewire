@@ -213,23 +213,10 @@ class EditorState(val graph: NodeGraph, val pos: net.minecraft.core.BlockPos = n
         return copy
     }
 
-    /** Edge currently being labelled via the inline overlay (null = idle). */
-    var renamingEdge: dev.nitka.nodewire.graph.Edge? by mutableStateOf(null)
-
-    /**
-     * Update an edge's label (empty / blank → clear). Picks the edge by
-     * value equality on (from, to, label) which is stable as long as the
-     * caller passes the actual edge instance from `edges.value`.
-     */
-    fun setEdgeLabel(edge: dev.nitka.nodewire.graph.Edge, label: String?) {
-        mutateGraph(mergeable = false) {
-            val sanitized = label?.takeIf { it.isNotBlank() }
-            val idx = graph.edges.indexOf(edge)
-            if (idx < 0) return@mutateGraph
-            graph.edges[idx] = edge.copy(label = sanitized)
-            _edges.value = graph.edges.toList()
-        }
-    }
+    // Wire-label UI was removed — Edge.label still exists in the model
+    // (preserved by the codec and used by GroupProxyPins as a fallback
+    // label for proxy pins), but there's no longer a renamingEdge state
+    // or setEdgeLabel mutator. Re-add if/when wire labelling lands again.
 
     private val _renamingNode = mutableStateOf<NodeId?>(null)
     private val _renamingGroup = mutableStateOf<GroupId?>(null)
@@ -262,6 +249,7 @@ class EditorState(val graph: NodeGraph, val pos: net.minecraft.core.BlockPos = n
             graph.nodes[id] = updated
             nodeFlows[id]?.value = updated
         }
+        requestSave?.invoke()
     }
 
     /**
@@ -278,6 +266,7 @@ class EditorState(val graph: NodeGraph, val pos: net.minecraft.core.BlockPos = n
             graph.groups[idx] = graph.groups[idx].copy(name = sanitized)
             syncGroupsFlow()
         }
+        requestSave?.invoke()
     }
 
     /** What context menu (if any) is currently open. Null = closed. */

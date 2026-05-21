@@ -82,6 +82,20 @@ data class NodeType(
      */
     val tickEvaluator: TickEvaluator? = null,
 ) {
+    /**
+     * Look up the inline-editor spec for one of this node type's input
+     * pins. Returns the explicit [Pin.editor] if declared; otherwise
+     * falls back to [defaultEditorFor] based on the pin's type. Unknown
+     * pin ids (e.g. after a Switch reshape that added case_N which
+     * isn't in the canonical inputs list) get the type-default — the
+     * caller passes the *saved* pin type alongside.
+     */
+    fun editorFor(pinId: String, fallbackType: PinType = PinType.ANY): PinEditor {
+        val canonical = inputs.firstOrNull { it.id == pinId }
+        if (canonical?.editor != null) return canonical.editor
+        return defaultEditorFor(canonical?.type ?: fallbackType)
+    }
+
     /** Instantiate a fresh [Node] at [pos] with default config. */
     fun newInstance(pos: CanvasPos = CanvasPos.Zero): Node =
         Node(

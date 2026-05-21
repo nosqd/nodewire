@@ -16,6 +16,15 @@ data class Pin(
     val id: String,
     val name: String,
     val type: PinType,
+    /**
+     * Inline-editor override for this pin. Null → renderer falls back
+     * to [defaultEditorFor]. NOT serialised — Pin.CODEC stays at 3
+     * fields because editor specs are part of the canonical [NodeType]
+     * registry, not per-instance graph state. Loaded pins have
+     * editor == null and the renderer looks up the canonical spec
+     * via [NodeType.editorFor].
+     */
+    val editor: PinEditor? = null,
 ) {
     companion object {
         val CODEC: Codec<Pin> = RecordCodecBuilder.create { i ->

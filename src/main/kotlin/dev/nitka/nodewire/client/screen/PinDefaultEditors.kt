@@ -9,6 +9,7 @@ import dev.nitka.nodewire.graph.PinEditor
 import dev.nitka.nodewire.graph.PinType
 import dev.nitka.nodewire.graph.PinValue
 import dev.nitka.nodewire.ui.components.Button
+import dev.nitka.nodewire.ui.components.ButtonDefaults
 import dev.nitka.nodewire.ui.components.ContextMenu
 import dev.nitka.nodewire.ui.components.ContextMenuItem
 import dev.nitka.nodewire.ui.components.Text
@@ -87,6 +88,7 @@ private fun CheckboxEditor(current: PinValue, onChange: (PinValue) -> Unit) {
     Button(
         onClick = { onChange(PinValue.Bool(!v)) },
         modifier = Modifier.width(14),
+        style = ButtonDefaults.compact(),
     ) {
         Text(if (v) "✓" else " ", style = NwTheme.typography.caption)
     }
@@ -173,6 +175,7 @@ private fun EnumEditor(
     Button(
         onClick = { if (options.isNotEmpty()) open = !open },
         modifier = Modifier.onPositioned { anchor = it },
+        style = ButtonDefaults.compact(),
     ) {
         Text(cur.ifEmpty { "—" }, style = NwTheme.typography.caption)
     }

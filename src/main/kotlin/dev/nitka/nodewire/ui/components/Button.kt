@@ -78,6 +78,24 @@ object ButtonDefaults {
         padding = PaddingValues(horizontal = NwTheme.dimens.space12, vertical = NwTheme.dimens.space6),
     )
 
+    /**
+     * Inline / dense variant — same colours as [ghost] but with minimal
+     * padding so the button can sit inside tight rows (pin defaults, inline
+     * controls in a node card) without dominating the row's height.
+     */
+    @Composable
+    fun compact() = ButtonStyle(
+        container         = Color.Transparent,
+        containerHover    = NwTheme.colors.surfaceHover,
+        containerPressed  = NwTheme.colors.surfacePressed,
+        containerDisabled = Color.Transparent,
+        content           = NwTheme.colors.onSurface,
+        contentDisabled   = NwTheme.colors.onSurfaceDisabled,
+        border  = BorderStroke(NwTheme.dimens.borderThin, NwTheme.colors.border),
+        shape   = NwTheme.shapes.small,
+        padding = PaddingValues(horizontal = NwTheme.dimens.space4, vertical = NwTheme.dimens.space2),
+    )
+
     @Composable
     fun danger() = ButtonStyle(
         container         = NwTheme.colors.danger,

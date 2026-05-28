@@ -443,12 +443,25 @@ object StockNodeTypes {
         id = "random_bool",
         displayName = "🎲 Random Bool",
         category = NodeCategory.CONSTANTS,
-        inputs = listOf(Pin("p", "P", PinType.FLOAT)),
+        inputs = listOf(
+            Pin("p", "P", PinType.FLOAT),
+            Pin("mode", "Mode", PinType.STRING, editor = PinEditor.Enum(
+                listOf("CONTINUOUS", "TRIGGERED")
+            )),
+            Pin("period", "Period", PinType.INT),
+            Pin("trigger", "Trigger", PinType.BOOL),
+        ),
         outputs = listOf(Pin("out", "Value", PinType.BOOL)),
         defaultConfig = {
-            CompoundTag().apply { seedPinDefault("p", PinValue.Float(0.5f)) }
+            CompoundTag().apply {
+                seedPinDefault("p", PinValue.Float(0.5f))
+                seedPinDefault("mode", PinValue.Str("CONTINUOUS"))
+                seedPinDefault("period", PinValue.Int(20))
+                seedPinDefault("trigger", PinValue.Bool(false))
+            }
         },
         evaluate = StockEvaluators.RandomBool,
+        tickEvaluator = StockEvaluators.RandomBoolTick,
     )
 
     val RANDOM_INT = nodeType(
@@ -458,15 +471,24 @@ object StockNodeTypes {
         inputs = listOf(
             Pin("min", "Min", PinType.INT),
             Pin("max", "Max", PinType.INT),
+            Pin("mode", "Mode", PinType.STRING, editor = PinEditor.Enum(
+                listOf("CONTINUOUS", "TRIGGERED")
+            )),
+            Pin("period", "Period", PinType.INT),
+            Pin("trigger", "Trigger", PinType.BOOL),
         ),
         outputs = listOf(Pin("out", "Value", PinType.INT)),
         defaultConfig = {
             CompoundTag().apply {
                 seedPinDefault("min", PinValue.Int(0))
                 seedPinDefault("max", PinValue.Int(15))
+                seedPinDefault("mode", PinValue.Str("CONTINUOUS"))
+                seedPinDefault("period", PinValue.Int(20))
+                seedPinDefault("trigger", PinValue.Bool(false))
             }
         },
         evaluate = StockEvaluators.RandomInt,
+        tickEvaluator = StockEvaluators.RandomIntTick,
     )
 
     val PULSE = nodeType(

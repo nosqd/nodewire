@@ -380,9 +380,8 @@ object StockEvaluators {
     // --- Test / generators ---------------------------------------------
 
     /**
-     * Random Bool: each tick emits `true` with probability `config.probability/100`.
-     * Stateless because the evaluator is the only deterministic-vs-not source —
-     * we don't keep state between ticks. Random instance is per-thread.
+     * Random Bool stateless fallback (used by [GraphEvaluator] / tests).
+     * Returns one fresh sample. Live runtime goes through [RandomBoolTick].
      */
     val RandomBool: NodeEvaluator = { _, inputs ->
         val p = ((inputs["p"] as? PinValue.Float)?.value ?: 0.5f).coerceIn(0f, 1f)
@@ -390,8 +389,7 @@ object StockEvaluators {
     }
 
     /**
-     * Random Int: each evaluation emits a uniform int in [min, max] inclusive.
-     * If min > max, swaps for sanity.
+     * Random Int stateless fallback. Live runtime uses [RandomIntTick].
      */
     val RandomInt: NodeEvaluator = { _, inputs ->
         var lo = (inputs["min"] as? PinValue.Int)?.value ?: 0
@@ -399,6 +397,71 @@ object StockEvaluators {
         if (hi < lo) { val t = lo; lo = hi; hi = t }
         val v = lo + java.util.concurrent.ThreadLocalRandom.current().nextInt(hi - lo + 1)
         mapOf("out" to PinValue.Int(v))
+    }
+
+    /**
+     * Stateful sampler: re-rolls only when the period elapses
+     * (mode = CONTINUOUS) or on a trigger rising edge (mode = TRIGGERED).
+     * The cached value persists between ticks via [state]; missing state on
+     * the first tick is initialised by sampling once so downstream nodes
+     * never see a default-zero/false from a fresh random node.
+     */
+    val RandomBoolTick: TickEvaluator = { state, _, inputs ->
+        val p = ((inputs["p"] as? PinValue.Float)?.value ?: 0.5f).coerceIn(0f, 1f)
+        val mode = (inputs["mode"] as? PinValue.Str)?.value ?: "CONTINUOUS"
+        val rng = java.util.concurrent.ThreadLocalRandom.current()
+        if (!state.contains("seeded")) {
+            state.putBoolean("lastValue", rng.nextFloat() < p)
+            state.putBoolean("seeded", true)
+        }
+        var last = state.getBoolean("lastValue")
+        var prevTrigger = state.getBoolean("prevTrigger")
+        if (mode == "TRIGGERED") {
+            val trig = (inputs["trigger"] as? PinValue.Bool)?.value ?: false
+            if (trig && !prevTrigger) last = rng.nextFloat() < p
+            prevTrigger = trig
+            state.putBoolean("prevTrigger", prevTrigger)
+        } else {
+            val period = ((inputs["period"] as? PinValue.Int)?.value ?: 20).coerceAtLeast(1)
+            var counter = state.getInt("counter") + 1
+            if (counter >= period) {
+                counter = 0
+                last = rng.nextFloat() < p
+            }
+            state.putInt("counter", counter)
+        }
+        state.putBoolean("lastValue", last)
+        mapOf("out" to PinValue.Bool(last))
+    }
+
+    val RandomIntTick: TickEvaluator = { state, _, inputs ->
+        var lo = (inputs["min"] as? PinValue.Int)?.value ?: 0
+        var hi = (inputs["max"] as? PinValue.Int)?.value ?: 15
+        if (hi < lo) { val t = lo; lo = hi; hi = t }
+        val mode = (inputs["mode"] as? PinValue.Str)?.value ?: "CONTINUOUS"
+        val rng = java.util.concurrent.ThreadLocalRandom.current()
+        if (!state.contains("seeded")) {
+            state.putInt("lastValue", lo + rng.nextInt(hi - lo + 1))
+            state.putBoolean("seeded", true)
+        }
+        var last = state.getInt("lastValue")
+        var prevTrigger = state.getBoolean("prevTrigger")
+        if (mode == "TRIGGERED") {
+            val trig = (inputs["trigger"] as? PinValue.Bool)?.value ?: false
+            if (trig && !prevTrigger) last = lo + rng.nextInt(hi - lo + 1)
+            prevTrigger = trig
+            state.putBoolean("prevTrigger", prevTrigger)
+        } else {
+            val period = ((inputs["period"] as? PinValue.Int)?.value ?: 20).coerceAtLeast(1)
+            var counter = state.getInt("counter") + 1
+            if (counter >= period) {
+                counter = 0
+                last = lo + rng.nextInt(hi - lo + 1)
+            }
+            state.putInt("counter", counter)
+        }
+        state.putInt("lastValue", last)
+        mapOf("out" to PinValue.Int(last))
     }
 
     /**

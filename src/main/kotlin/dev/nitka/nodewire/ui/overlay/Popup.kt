@@ -93,6 +93,14 @@ private fun resolveOffset(
         is PopupPosition.Anchored -> resolveAnchored(pos, screen, popup)
         PopupPosition.Centered -> ((screen.width - popup.width) / 2) to ((screen.height - popup.height) / 2)
     }
+    // A cascade submenu (avoidBand set) has already chosen a band-avoidant X
+    // that may extend off-screen; clamping X would pull it back over an
+    // ancestor, which is the exact overlap we're avoiding. Clamp only Y.
+    if (pos is PopupPosition.Anchored && pos.avoidBand != null) {
+        if (popup.height == 0) return raw // pre-measurement
+        val maxY = (screen.height - popup.height).coerceAtLeast(0)
+        return raw.first to raw.second.coerceIn(0, maxY)
+    }
     return clampToScreen(raw.first, raw.second, popup, screen)
 }
 
@@ -118,15 +126,26 @@ private fun resolveAnchored(
         }
         PopupPlacement.RightOf -> {
             val rightX = a.screenRight + g
-            val flipX = a.screenX - g - popup.width
-            val flip = rightX + popup.width > screen.width && flipX >= 0
-            (if (flip) flipX else rightX) to a.screenY
+            if (rightX + popup.width <= screen.width) {
+                rightX to a.screenY                       // fits on the right
+            } else {
+                // Flip to the LEFT of the whole ancestor band (or just the
+                // anchor when there's no cascade) so a deep submenu never
+                // lands on a grandparent. If even that runs off the left
+                // edge, keep the right position (clips) rather than overlap.
+                val leftBound = (pos.avoidBand?.first ?: a.screenX) - g - popup.width
+                (if (leftBound >= 0) leftBound else rightX) to a.screenY
+            }
         }
         PopupPlacement.LeftOf -> {
             val leftX = a.screenX - g - popup.width
-            val flipX = a.screenRight + g
-            val flip = leftX < 0 && flipX + popup.width <= screen.width
-            (if (flip) flipX else leftX) to a.screenY
+            if (leftX >= 0) {
+                leftX to a.screenY                        // fits on the left
+            } else {
+                // Flip to the RIGHT of the whole ancestor band.
+                val rightBound = (pos.avoidBand?.last ?: a.screenRight) + g
+                (if (rightBound + popup.width <= screen.width) rightBound else leftX) to a.screenY
+            }
         }
     }
 }

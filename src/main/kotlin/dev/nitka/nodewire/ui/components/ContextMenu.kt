@@ -102,6 +102,15 @@ private val LocalSubmenuOpenReporter = compositionLocalOf<((id: Any, open: Boole
 private val LocalSubmenuDirection = compositionLocalOf { PopupPlacement.RightOf }
 
 /**
+ * Screen-X span [min..max] occupied by all ancestor panels of the current
+ * submenu (root + every intermediate panel). Threaded down so a submenu
+ * that has to flip lands OUTSIDE the whole cascade band instead of just
+ * past its immediate parent row — which, with flush (gap=0) panels, would
+ * drop it on top of a grandparent. Null at the root (no ancestors yet).
+ */
+private val LocalSubmenuBand = compositionLocalOf<IntRange?> { null }
+
+/**
  * Per-[MenuPanel] mutable holder for "which submenu row is currently
  * open". Lets sibling [SubmenuRow]s coordinate so opening one closes
  * any other in the same panel — fixes the overlap that happened when
@@ -269,19 +278,33 @@ private fun SubmenuRow(item: ContextMenuItem.Submenu, onDismiss: () -> Unit) {
     }
     val anchorCoords = anchor
     val placement = LocalSubmenuDirection.current
+    val parentBand = LocalSubmenuBand.current
     if (open && anchorCoords != null) {
+        // The band this submenu must avoid = all ancestor panels (parentBand)
+        // unioned with THIS row's panel (the row is full panel width, so its
+        // screenX..screenRight is the current panel's span).
+        val avoidBand = run {
+            val lo = minOf(parentBand?.first ?: anchorCoords.screenX, anchorCoords.screenX)
+            val hi = maxOf(parentBand?.last ?: anchorCoords.screenRight, anchorCoords.screenRight)
+            lo..hi
+        }
         Popup(
             position = PopupPosition.Anchored(
                 anchor = anchorCoords,
                 placement = placement,
                 gap = 0,
+                avoidBand = avoidBand,
             ),
         ) {
-            MenuPanel(
-                onSelfHover = { subPanelHovered = it },
-                onDescendantOpen = { subDescendantOpen = it },
-            ) {
-                for (sub in item.items) Item(sub, onDismiss)
+            // Children of this submenu treat (ancestors + this panel) as the
+            // band to avoid — they add their own panel via their own anchor.
+            CompositionLocalProvider(LocalSubmenuBand provides avoidBand) {
+                MenuPanel(
+                    onSelfHover = { subPanelHovered = it },
+                    onDescendantOpen = { subDescendantOpen = it },
+                ) {
+                    for (sub in item.items) Item(sub, onDismiss)
+                }
             }
         }
     }

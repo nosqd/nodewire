@@ -31,6 +31,14 @@ class SaveGraphPacketTest {
         outputs = listOf(Pin(pinId, pinId, PinType.INT)),
     )
 
+    private fun vec3Node(id: UUID, pinId: String): Node = Node(
+        id = id,
+        typeKey = ResourceLocation.fromNamespaceAndPath("nodewire", "vec3_const"),
+        pos = CanvasPos.Zero,
+        inputs = emptyList(),
+        outputs = listOf(Pin(pinId, pinId, PinType.VEC3)),
+    )
+
     @Test
     fun validGraphPasses() {
         val a = UUID.randomUUID(); val b = UUID.randomUUID()
@@ -52,12 +60,23 @@ class SaveGraphPacketTest {
     }
 
     @Test
-    fun typeMismatchFails() {
+    fun convertibleTypesPass() {
         val ai = UUID.randomUUID(); val and = UUID.randomUUID()
         val g = NodeGraph().apply {
             add(intNode(ai, "out")); add(andNode(and))
-            // INT → BOOL — should reject.
+            // INT → BOOL is convertible via PinValueConversion — must NOT reject.
             addEdge(Edge(PinRef(ai, "out"), PinRef(and, "a")))
+        }
+        assertNull(SaveGraphPacket.validate(g))
+    }
+
+    @Test
+    fun nonConvertibleTypesFail() {
+        val vi = UUID.randomUUID(); val and = UUID.randomUUID()
+        val g = NodeGraph().apply {
+            add(vec3Node(vi, "out")); add(andNode(and))
+            // VEC3 → BOOL is not convertible — must reject.
+            addEdge(Edge(PinRef(vi, "out"), PinRef(and, "a")))
         }
         assertNotNull(SaveGraphPacket.validate(g))
     }

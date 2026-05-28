@@ -112,7 +112,11 @@ data class SaveGraphPacket(val pos: BlockPos, val graph: NodeGraph) : CustomPack
                     ?: return "no output pin ${edge.from.pin} on ${edge.from.node}"
                 val toPin = toNode.inputs.firstOrNull { it.id == edge.to.pin }
                     ?: return "no input pin ${edge.to.pin} on ${edge.to.node}"
-                if (fromPin.type != toPin.type) {
+                // Defer to PinValueConversion — the same gate the wire-connect
+                // UI and edge-read pipeline use. Strict equality used to silently
+                // drop the entire save on any Bool→Redstone (etc.) edge, wiping
+                // the user's wires on reopen.
+                if (!dev.nitka.nodewire.graph.PinValueConversion.canConvert(fromPin.type, toPin.type)) {
                     return "type mismatch: ${fromPin.type} → ${toPin.type}"
                 }
                 if (!seenInputs.add(edge.to)) {

@@ -220,7 +220,7 @@ object WireWorldRenderer {
                     pose, lineBuf,
                     box.minX, box.minY, box.minZ,
                     box.maxX, box.maxY, box.maxZ,
-                    0f, 0f, 0f, 1f,
+                    0.72f, 0.19f, 0.19f, 1f,
                 )
             }
             pose.popPose()

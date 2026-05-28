@@ -9,13 +9,19 @@ import dev.nitka.nodewire.graph.PinEditor
 import dev.nitka.nodewire.graph.PinType
 import dev.nitka.nodewire.graph.PinValue
 import dev.nitka.nodewire.ui.components.Button
+import dev.nitka.nodewire.ui.components.ContextMenu
+import dev.nitka.nodewire.ui.components.ContextMenuItem
 import dev.nitka.nodewire.ui.components.Text
 import dev.nitka.nodewire.ui.components.TextInput
 import dev.nitka.nodewire.ui.core.Modifier
 import dev.nitka.nodewire.ui.layout.Alignment
 import dev.nitka.nodewire.ui.layout.Arrangement
+import dev.nitka.nodewire.ui.layout.LayoutCoordinates
 import dev.nitka.nodewire.ui.layout.Row
+import dev.nitka.nodewire.ui.modifier.input.onPositioned
 import dev.nitka.nodewire.ui.modifier.layout.width
+import dev.nitka.nodewire.ui.overlay.PopupPlacement
+import dev.nitka.nodewire.ui.overlay.PopupPosition
 import dev.nitka.nodewire.ui.theme.NwTheme
 
 /**
@@ -151,10 +157,9 @@ private fun VectorEditor(
 }
 
 /**
- * Cycle-on-click fallback for Enum editors. The project's [ContextMenu]
- * API requires explicit screen coordinates (no `PopupPosition.Auto`) so
- * we punt on the anchored dropdown for now — click the button to advance
- * to the next option. A proper anchored picker is a follow-up.
+ * Anchored dropdown for Enum editors. Click the button → opens a
+ * [ContextMenu] anchored below the button with every option as an
+ * action row. Click outside or click an option to dismiss.
  */
 @Composable
 private fun EnumEditor(
@@ -163,14 +168,29 @@ private fun EnumEditor(
     onChange: (PinValue) -> Unit,
 ) {
     val cur = (current as? PinValue.Str)?.value ?: options.firstOrNull().orEmpty()
+    var open by remember { mutableStateOf(false) }
+    var anchor by remember { mutableStateOf<LayoutCoordinates?>(null) }
     Button(
-        onClick = {
-            if (options.isEmpty()) return@Button
-            val idx = options.indexOf(cur).coerceAtLeast(0)
-            val next = options[(idx + 1) % options.size]
-            onChange(PinValue.Str(next))
-        },
+        onClick = { if (options.isNotEmpty()) open = !open },
+        modifier = Modifier.onPositioned { anchor = it },
     ) {
         Text(cur.ifEmpty { "—" }, style = NwTheme.typography.caption)
+    }
+    val anchorCoords = anchor
+    if (open && anchorCoords != null) {
+        ContextMenu(
+            items = options.map { opt ->
+                ContextMenuItem.Action(opt) {
+                    onChange(PinValue.Str(opt))
+                    open = false
+                }
+            },
+            position = PopupPosition.Anchored(
+                anchor = anchorCoords,
+                placement = PopupPlacement.Below,
+                gap = NwTheme.dimens.space4,
+            ),
+            onDismiss = { open = false },
+        )
     }
 }

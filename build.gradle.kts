@@ -5,10 +5,12 @@ import java.util.zip.ZipOutputStream
 plugins {
     // ModDevGradle (non-legacy) — for NeoForge 1.20.2+ / 1.21.x.
     // The .legacyforge plugin was for Forge 1.20.1 (now retired in master).
-    id("net.neoforged.moddev") version "2.0.141"
-    id("org.jetbrains.kotlin.jvm") version "2.0.20"
+    // Versions are declared once in settings.gradle.kts pluginManagement so the
+    // :scripting addon subproject can apply the same plugins without a version.
+    id("net.neoforged.moddev")
+    id("org.jetbrains.kotlin.jvm")
     // Compose Compiler Gradle Plugin pairs with the Kotlin version.
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.20"
+    id("org.jetbrains.kotlin.plugin.compose")
     `java-library`
     idea
 }
@@ -298,6 +300,11 @@ dependencies {
     }
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+
+    // NOTE: the Kotlin-compiler-backed script backend lives in the optional
+    // `:scripting` addon module — core only declares the `ScriptCompiler` SPI
+    // (dev.nitka.nodewire.script.ScriptCompiler) and never references
+    // kotlin.script.experimental.* directly.
 
     // Yoga — locally vendored. NOTE: NeoForge 1.21.1 runs on Java 21, so
     // the j17 rebuild is no longer required — the upstream Java-21 jar

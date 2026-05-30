@@ -523,6 +523,50 @@ object StockNodeTypes {
         tickEvaluator = StockEvaluators.PulseTick,
     )
 
+    // --- Script -------------------------------------------------------
+    //
+    // An inline Kotlin script node. Its pins are derived from the script's
+    // `input<T>(...)` / `output<T>(...)` header (parsed by HeaderLexer — no
+    // compiler), and it evaluates each tick through ScriptNodeRuntime, which
+    // compiles the source off-thread via the optional :scripting addon. With the
+    // addon absent the node compiles to nothing and outputs type-defaults.
+    private val DEFAULT_SCRIPT = """
+        val enable = input<Boolean>("enable")
+        val out = output<Redstone>("out")
+        var t by state(0)
+        var was by state(false)
+        tick {
+            if (enable.value && !was) chat("script enabled!")
+            was = enable.value
+            if (!enable.value) { out.value = Redstone.OFF; return@tick }
+            t = (t + 1) % 20
+            out.value = if (t < 10) Redstone.MAX else Redstone.OFF
+        }
+    """.trimIndent()
+
+    /** Pins for a freshly-spawned script node = the default script's header (newInstance
+     *  copies the static pin lists; pinReshape only runs on decode/render). */
+    private val DEFAULT_SCRIPT_HEADER =
+        dev.nitka.nodewire.script.lexer.HeaderLexer.parse(DEFAULT_SCRIPT)
+
+    val SCRIPT = nodeType(
+        id = "script",
+        displayName = "📜 Script",
+        category = NodeCategory.FLOW,
+        inputs = DEFAULT_SCRIPT_HEADER.inputs,
+        outputs = DEFAULT_SCRIPT_HEADER.outputs,
+        defaultConfig = { CompoundTag().apply { putString("src", DEFAULT_SCRIPT) } },
+        pinReshape = { config ->
+            val h = dev.nitka.nodewire.script.lexer.HeaderLexer.parse(config.getString("src"))
+            h.inputs to h.outputs
+        },
+        tickEvaluator = { state, config, inputs ->
+            val src = config.getString("src")
+            val outs = dev.nitka.nodewire.script.lexer.HeaderLexer.parse(src).outputs
+            dev.nitka.nodewire.script.ScriptNodeRuntime.evalTick(src, state, inputs, outs)
+        },
+    )
+
     /** Registers every stock type into [NodeTypeRegistry]. Idempotent. */
     fun registerAll() {
         listOf(
@@ -542,6 +586,8 @@ object StockNodeTypes {
             SAMPLE_HOLD, LATCH_SR, LATCH_D, SEQUENCER,
             // Test / Generators
             RANDOM_BOOL, RANDOM_INT, PULSE,
+            // Script
+            SCRIPT,
         ).forEach(NodeTypeRegistry::register)
         VectorNodeTypes.all().forEach(NodeTypeRegistry::register)
         NodeTypeRegistry.register(

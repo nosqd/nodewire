@@ -1,5 +1,9 @@
 package dev.nitka.nodewire.script
 
+import kotlin.properties.PropertyDelegateProvider
+import kotlin.properties.ReadWriteProperty
+import kotlin.reflect.KProperty
+
 /**
  * Static description of one declared pin — the name, its [ScriptType] (resolved
  * from the Kotlin type via [scriptPinType]), and whether the declaration
@@ -93,6 +97,38 @@ abstract class ScriptModule {
     fun eval(block: () -> Unit) {
         tickBlock = block
         isTickBody = false
+    }
+
+    /**
+     * `var t by state(0)` — a persisted state cell; the property name is the NBT
+     * key. A MEMBER (not a top-level extension) on purpose: under NeoForge the
+     * compiler resolves it through the implicit receiver, whereas a top-level
+     * function reached only via a `*` star-import doesn't resolve when the package
+     * is served from a `union://` filesystem (`input`/`output` work, `state`
+     * didn't — see ScriptHost's URLClassLoader notes).
+     *
+     * The delegate-property receiver (`thisRef`) is `Any?`: a top-level script
+     * `var x by …` has no dispatch receiver, so the provider/property MUST accept
+     * a null `thisRef`.
+     */
+    fun <T> state(init: T): PropertyDelegateProvider<Any?, ReadWriteProperty<Any?, T>> {
+        val kind = when (init) {
+            is Int -> StateKind.INT
+            is Float -> StateKind.FLOAT
+            is Boolean -> StateKind.BOOL
+            is String -> StateKind.STRING
+            is Redstone -> StateKind.REDSTONE
+            else -> throw ScriptDeclException(
+                "state var must be Int/Float/Boolean/String/Redstone (got ${init?.let { it::class.simpleName } ?: "null"})",
+            )
+        }
+        return PropertyDelegateProvider { _, prop ->
+            val cell = StateCell<T>(prop.name, init, kind).also { stateCells += it }
+            object : ReadWriteProperty<Any?, T> {
+                override fun getValue(thisRef: Any?, property: KProperty<*>): T = cell.value
+                override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) { cell.value = value }
+            }
+        }
     }
 
     // ── Debug messaging ─────────────────────────────────────────────────

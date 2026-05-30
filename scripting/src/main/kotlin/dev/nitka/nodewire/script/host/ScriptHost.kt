@@ -138,11 +138,14 @@ object ScriptHost : ScriptCompiler {
 
         return index.map { it.trim() }.filter { it.isNotEmpty() }.map { name ->
             val out = File(cacheDir, name)
-            if (!out.exists() || out.length() == 0L) {
-                val res = cl.getResourceAsStream("$RESOURCE_DIR/$name")
-                    ?: error("nodewire-compiler/$name listed in index but missing from the jar")
-                res.use { input -> out.outputStream().use { input.copyTo(it) } }
-            }
+            // Always re-extract (overwrite). The bundled jars change between dev
+            // builds but the per-Kotlin-version cache dir name does not, so a
+            // skip-if-exists check would silently reuse a STALE jar (e.g. an old
+            // script-api.jar missing newly-added facade) and break compilation.
+            // Cost: a one-time ~1-2 s extract on the first compile per JVM.
+            val res = cl.getResourceAsStream("$RESOURCE_DIR/$name")
+                ?: error("nodewire-compiler/$name listed in index but missing from the jar")
+            res.use { input -> out.outputStream().use { input.copyTo(it) } }
             out
         }
     }

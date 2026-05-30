@@ -524,6 +524,11 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
                 .currentValues.set(prevAero)
         }
 
+        // Dispatch any log()/chat() that script nodes emitted during eval.tick.
+        dev.nitka.nodewire.script.ScriptMessageSink.drain().let { msgs ->
+            if (msgs.isNotEmpty()) dispatchScriptMessages(level, pos, msgs)
+        }
+
         // CC: Tweaked event dispatch — skip everything if the mod isn't
         // present so the BE class loads cleanly on CC-less servers.
         if (net.neoforged.fml.ModList.get().isLoaded("computercraft") &&
@@ -875,6 +880,30 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
 
         private fun directionOf(name: String): Direction? =
             DIRECTIONS_BY_NAME[name.lowercase()]
+
+        private val SCRIPT_LOG: org.slf4j.Logger = com.mojang.logging.LogUtils.getLogger()
+        private const val SCRIPT_CHAT_RANGE = 16.0
+
+        /** Deliver a tick's script log()/chat() messages: LOG to console, CHAT to nearby players. */
+        private fun dispatchScriptMessages(
+            level: Level,
+            pos: BlockPos,
+            msgs: List<dev.nitka.nodewire.script.ScriptMessage>,
+        ) {
+            val server = level as? net.minecraft.server.level.ServerLevel
+            for (m in msgs) {
+                when (m.kind) {
+                    dev.nitka.nodewire.script.MessageKind.LOG ->
+                        SCRIPT_LOG.info("[script @ {}] {}", pos, m.text)
+                    dev.nitka.nodewire.script.MessageKind.CHAT -> {
+                        val comp = net.minecraft.network.chat.Component.literal(m.text)
+                        server?.players()
+                            ?.filter { pos.closerThan(it.blockPosition(), SCRIPT_CHAT_RANGE) }
+                            ?.forEach { it.sendSystemMessage(comp) }
+                    }
+                }
+            }
+        }
 
         internal fun redstoneOf(value: PinValue?): Int {
             if (value == null) return 0

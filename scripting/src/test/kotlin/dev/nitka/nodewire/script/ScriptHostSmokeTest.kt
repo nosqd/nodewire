@@ -193,6 +193,26 @@ class ScriptHostSmokeTest {
         assertEquals(PinValue.Float(5f), module.pullOutputs()["out"])
     }
 
+    // #5b — the EXACT default node script (Boolean state + chat) must compile.
+    @Test fun defaultBlinkerScriptCompiles() {
+        val src = """
+            val enable = input<Boolean>("enable")
+            val out = output<Redstone>("out")
+            var t by state(0)
+            var was by state(false)
+            tick {
+                if (enable.value && !was) chat("script enabled!")
+                was = enable.value
+                if (!enable.value) { out.value = Redstone.OFF; return@tick }
+                t = (t + 1) % 20
+                out.value = if (t < 10) Redstone.MAX else Redstone.OFF
+            }
+        """.trimIndent()
+        val r = ScriptHost.compileToModule(src)
+        println("[script-spike] blinker reports:\n${diag(r)}")
+        assertTrue(r is ScriptCompileResult.Success, "default blinker should compile:\n${diag(r)}")
+    }
+
     // #6 — time guard aborts while(true) and disables after 3 strikes.
     @Test fun timeGuardAbortsAndDisablesAfterThreeStrikes() {
         val executor = ScriptExecutor(threads = 4, maxStrikes = 3)

@@ -75,6 +75,7 @@ object VideoFrameRenderer {
         // restore in finally.
         val savedProj = RenderSystem.getProjectionMatrix()
         val savedSort = RenderSystem.getVertexSorting()
+        val savedColor = RenderSystem.getShaderColor().clone()
         val mv = RenderSystem.getModelViewStack()
 
         // bindWrite(true) sets the viewport to the target's size (the standard
@@ -95,6 +96,12 @@ object VideoFrameRenderer {
         RenderSystem.clear(GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX)
         RenderSystem.enableBlend()
         RenderSystem.defaultBlendFunc()
+        // We draw mid-RenderLevelStage, where the world renderer may have left the
+        // shader colour-modulator at a fog/biome tint. GuiGraphics fills + font
+        // MULTIPLY by it, so without resetting to white the text/rects come out
+        // tinted ("gradient"/wrong colour) — intermittently, depending on the
+        // world frame's leftover state. Force the modulator white for the pass.
+        RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
         val gfx = GuiGraphics(mc, mc.renderBuffers().bufferSource())
         try {
             val now = net.minecraft.Util.getMillis()
@@ -122,6 +129,7 @@ object VideoFrameRenderer {
             mv.popMatrix()
             RenderSystem.applyModelViewMatrix()
             RenderSystem.setProjectionMatrix(savedProj, savedSort)
+            RenderSystem.setShaderColor(savedColor[0], savedColor[1], savedColor[2], savedColor[3])
             RenderSystem.enableDepthTest()
         }
         return true

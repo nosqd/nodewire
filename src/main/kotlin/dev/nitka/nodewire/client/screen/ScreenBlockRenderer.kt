@@ -16,6 +16,10 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderer
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider
 import net.minecraft.core.Direction
 import org.joml.Matrix4f
+import org.lwjgl.opengl.GL11.GL_NEAREST
+import org.lwjgl.opengl.GL11.GL_TEXTURE_2D
+import org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER
+import org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER
 
 /**
  * The repo's **first** [BlockEntityRenderer]. Blits a Video handle's client-
@@ -159,6 +163,18 @@ class ScreenBlockRenderer(
                         // position_tex multiplies by the shader colour-modulator —
                         // force it white so the blit shows the FBO content verbatim.
                         RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
+                        // Force NEAREST EVERY frame (not just at surface creation):
+                        // the 256² FBO is magnified onto the face, and LINEAR blurs
+                        // thin text into the camera background (red→blue gradient).
+                        // Done here so it sticks regardless of when the surface was
+                        // allocated or whether the client was only hotswapped.
+                        com.mojang.blaze3d.platform.GlStateManager._bindTexture(texId)
+                        com.mojang.blaze3d.platform.GlStateManager._texParameter(
+                            GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST,
+                        )
+                        com.mojang.blaze3d.platform.GlStateManager._texParameter(
+                            GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST,
+                        )
                     },
                     Runnable {},
                 ) {})

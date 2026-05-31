@@ -76,6 +76,8 @@ object VideoFrameRenderer {
         val savedProj = RenderSystem.getProjectionMatrix()
         val savedSort = RenderSystem.getVertexSorting()
         val savedColor = RenderSystem.getShaderColor().clone()
+        val savedFogStart = RenderSystem.getShaderFogStart()
+        val savedFogEnd = RenderSystem.getShaderFogEnd()
         val mv = RenderSystem.getModelViewStack()
 
         // bindWrite(true) sets the viewport to the target's size (the standard
@@ -102,6 +104,15 @@ object VideoFrameRenderer {
         // tinted ("gradient"/wrong colour) — intermittently, depending on the
         // world frame's leftover state. Force the modulator white for the pass.
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
+        // FONT FOG — the load-bearing fix. `rendertype_text` (and several GUI
+        // shaders) apply FOG, and we draw mid-RenderLevelStage where the live
+        // world fog is the SKY colour (blue), distance-based. Our ortho maps each
+        // text quad to a fog distance, so glyphs get fog-blended toward blue by
+        // position — the "red text fading to blue" per-glyph gradient. Fills/camera
+        // use fog-less shaders, so ONLY text was affected. Push fog out of range so
+        // the pass is fog-free; restored in finally.
+        RenderSystem.setShaderFogStart(1.0e7f)
+        RenderSystem.setShaderFogEnd(1.0e8f)
         // 2D pass: make DRAW ORDER authoritative, not depth. The camera blit
         // (image()) is immediate and writes depth at z=0; the HUD fills/text are
         // batched GuiGraphics drawn at the same z, so with depth-test on, full-
@@ -137,6 +148,8 @@ object VideoFrameRenderer {
             RenderSystem.applyModelViewMatrix()
             RenderSystem.setProjectionMatrix(savedProj, savedSort)
             RenderSystem.setShaderColor(savedColor[0], savedColor[1], savedColor[2], savedColor[3])
+            RenderSystem.setShaderFogStart(savedFogStart)
+            RenderSystem.setShaderFogEnd(savedFogEnd)
             RenderSystem.enableDepthTest()
         }
         return true

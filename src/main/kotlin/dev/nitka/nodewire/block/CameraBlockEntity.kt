@@ -121,6 +121,9 @@ class CameraBlockEntity(pos: BlockPos, state: BlockState) :
         readParam(tag, YAW_CHANNEL, numeric = true)
         readParam(tag, PITCH_CHANNEL, numeric = true)
         if (tag.contains(ENABLE_CHANNEL)) channelInputs[ENABLE_CHANNEL] = PinValue.Bool(tag.getBoolean(ENABLE_CHANNEL))
+        // The synced handle may arrive here AFTER the client's onLoad (fresh
+        // placement), so (re)try registration now that it's known.
+        tryClientRegister()
     }
 
     private fun readParam(tag: CompoundTag, key: String, numeric: Boolean) {
@@ -137,18 +140,33 @@ class CameraBlockEntity(pos: BlockPos, state: BlockState) :
 
     override fun onLoad() {
         super.onLoad()
-        // Mint a stable handle on first load (either side); persist it.
-        if (handle == UUID(0L, 0L)) {
+        // The handle is SERVER-AUTHORITATIVE — only the server mints it. On a
+        // fresh placement the client's onLoad fires BEFORE the BE data packet
+        // arrives, so minting here would diverge from the server's handle: the
+        // capture would render into one surface while the Screen (bound to the
+        // server handle) blits another → white. The client waits for the sync.
+        if (level?.isClientSide == false && handle == UUID(0L, 0L)) {
             handle = UUID.randomUUID()
             setChanged()
+            // Push so nearby clients learn the freshly-minted handle promptly.
+            level?.sendBlockUpdated(blockPos, blockState, blockState, Block.UPDATE_CLIENTS)
         }
-        if (level?.isClientSide == true && !clientRegistered) {
-            dev.nitka.nodewire.client.video.VideoManager.acquire(handle)
-            dev.nitka.nodewire.client.camera.CameraFeedRegistry.register(
-                dev.nitka.nodewire.client.camera.CameraFeed(this),
-            )
-            clientRegistered = true
-        }
+        tryClientRegister()
+    }
+
+    /**
+     * Register this camera's client capture feed — but only once the
+     * server-authoritative [handle] is known (non-nil). Safe to call repeatedly
+     * (from [onLoad] and every [loadAdditional] sync); registers exactly once.
+     */
+    private fun tryClientRegister() {
+        if (level?.isClientSide != true || clientRegistered) return
+        if (handle == UUID(0L, 0L)) return // handle not synced from the server yet
+        dev.nitka.nodewire.client.video.VideoManager.acquire(handle)
+        dev.nitka.nodewire.client.camera.CameraFeedRegistry.register(
+            dev.nitka.nodewire.client.camera.CameraFeed(this),
+        )
+        clientRegistered = true
     }
 
     override fun setRemoved() {

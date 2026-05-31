@@ -530,22 +530,15 @@ object StockNodeTypes {
     // compiler), and it evaluates each tick through ScriptNodeRuntime, which
     // compiles the source off-thread via the optional :scripting addon. With the
     // addon absent the node compiles to nothing and outputs type-defaults.
-    private val DEFAULT_SCRIPT = """
-        val enable = input<Boolean>("enable")
-        val out = output<Redstone>("out")
-        var t by state(0)
-        var was by state(false)
-        tick {
-            if (enable.value && !was) chat("script enabled!")
-            was = enable.value
-            if (!enable.value) { out.value = Redstone.OFF; return@tick }
-            t = (t + 1) % 20
-            out.value = if (t < 10) Redstone.MAX else Redstone.OFF
-        }
-    """.trimIndent()
+    // A freshly-spawned script node starts EMPTY — no seed logic, no pins. The
+    // player writes their own script via the 📜 Edit editor; on apply the pins
+    // reshape from the new `input<T>/output<T>` header. A blank source compiles to
+    // nothing (ScriptNodeRuntime skips a blank src) and outputs type-defaults.
+    private val DEFAULT_SCRIPT = ""
 
-    /** Pins for a freshly-spawned script node = the default script's header (newInstance
-     *  copies the static pin lists; pinReshape only runs on decode/render). */
+    /** Pins for a freshly-spawned script node = the (empty) default header, so a
+     *  blank node has no pins until a script is written (newInstance copies the
+     *  static pin lists; pinReshape only runs on decode/render). */
     private val DEFAULT_SCRIPT_HEADER =
         dev.nitka.nodewire.script.lexer.HeaderLexer.parse(DEFAULT_SCRIPT)
 

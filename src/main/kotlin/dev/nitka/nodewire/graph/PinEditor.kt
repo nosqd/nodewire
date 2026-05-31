@@ -25,5 +25,6 @@ fun defaultEditorFor(type: PinType): PinEditor = when (type) {
     PinType.INT, PinType.FLOAT, PinType.REDSTONE -> PinEditor.Numeric
     PinType.STRING -> PinEditor.Text
     PinType.VEC2, PinType.VEC3, PinType.QUAT -> PinEditor.Vector
+    PinType.VIDEO -> PinEditor.None
     PinType.ANY -> PinEditor.None
 }

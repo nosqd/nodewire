@@ -43,6 +43,7 @@ object HeaderLexer {
         "Vec2" to PinType.VEC2,
         "Vec3" to PinType.VEC3,
         "Quat" to PinType.QUAT,
+        "Video" to PinType.VIDEO,
     )
 
     fun parse(src: String): HeaderResult {

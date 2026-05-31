@@ -549,6 +549,7 @@ private fun pinChipText(pin: Pin, value: PinValue?): String = when (value) {
     is PinValue.Vec2 -> "(%.1f; %.1f)".format(value.x, value.y)
     is PinValue.Vec3 -> "(%.1f; %.1f; %.1f)".format(value.x, value.y, value.z)
     is PinValue.Quat -> "q(%.1f; %.1f; %.1f; %.1f)".format(value.x, value.y, value.z, value.w)
+    is PinValue.Video -> "vid:${value.handle.toString().take(8)}"
 }
 
 @Composable
@@ -561,6 +562,7 @@ private fun pinColor(type: PinType): Color = when (type) {
     PinType.VEC2 -> NwTheme.colors.pinVec2
     PinType.VEC3 -> NwTheme.colors.pinVec3
     PinType.QUAT -> NwTheme.colors.pinQuat
+    PinType.VIDEO -> NwTheme.colors.pinVideo
     // ANY pins render in a neutral muted color — they have no canonical
     // type-color since they accept anything; see Task 4 for the dedicated
     // ANY-pin rendering treatment.

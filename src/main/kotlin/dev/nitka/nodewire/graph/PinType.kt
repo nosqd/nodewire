@@ -24,6 +24,8 @@ enum class PinType {
     VEC2,
     VEC3,
     QUAT,
+    /** Opaque video stream handle (a UUID). Frames are client-local, keyed by the handle. */
+    VIDEO,
     /**
      * Generic — accepts a connection from any other pin type. Carries
      * the raw [PinValue] through the evaluator unchanged. The connect-UI

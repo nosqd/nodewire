@@ -27,6 +27,14 @@ class StatefulGraphEvaluator(val graph: NodeGraph) {
 
     private val nodeStates: MutableMap<NodeId, CompoundTag> = HashMap()
 
+    /**
+     * The per-node scratch state tag for [id], or null if the node hasn't ticked
+     * yet. Server-only — exposes the SAME tag instance `ScriptNodeRuntime` is keyed
+     * by (identity match), so the host can drain a script node's replicated deltas
+     * and read its current replicated values for late joiners. Additive (spec §5.5c).
+     */
+    internal fun nodeState(id: NodeId): CompoundTag? = nodeStates[id]
+
     /** Outputs produced by the previous tick — read for state-node inputs. */
     private var lastOutputs: Map<Pair<NodeId, String>, PinValue> = emptyMap()
 

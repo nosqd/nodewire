@@ -164,6 +164,18 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
      */
     private val lastSideEmit: MutableMap<Pair<BlockPos, Direction>, Int> = HashMap()
 
+    /**
+     * Phase 2b — CLIENT-side replicated script state, keyed by node id. The
+     * server pushes [dev.nitka.nodewire.net.StateDeltaPacket]s (and seeds late
+     * joiners via [getUpdateTag]); each delta merges into the node's tag here.
+     * A future client script runtime (2c) reads from this map BEFORE its
+     * client behaviors run. No server-side meaning. Client-thread only.
+     */
+    private val clientReplicatedState: MutableMap<NodeId, CompoundTag> = HashMap()
+
+    /** Read-only view of a node's current client replicated state (2c will consume). */
+    fun clientReplicatedStateOf(nodeId: NodeId): CompoundTag? = clientReplicatedState[nodeId]
+
     fun invalidateEvaluator() {
         serverEvaluator = null
         // Drop the per-node script runtimes too: the evaluator is rebuilt with
@@ -246,6 +258,20 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
      * Caller is responsible for any neighbour-update / block-update
      * broadcast — this method only mutates state + setChanged().
      */
+    /**
+     * Phase 2b — CLIENT-only: merge replicated state [deltaTag] (a multi-key tag
+     * of cell values) into [nodeId]'s client replicated-state slot. No broadcast
+     * (the data CAME from the server). Returns false if the node is gone. This is
+     * the thin "apply a delta into the node's state tag" helper — it does NOT run
+     * any client script runtime (that is 2c). Client-thread only.
+     */
+    fun applyClientStateDelta(nodeId: NodeId, deltaTag: CompoundTag): Boolean {
+        if (nodeId !in graph.nodes) return false
+        val slot = clientReplicatedState.getOrPut(nodeId) { CompoundTag() }
+        slot.merge(deltaTag)
+        return true
+    }
+
     fun replaceNodeConfig(nodeId: NodeId, newConfig: CompoundTag): Boolean {
         val existing = graph.nodes[nodeId] ?: return false
         graph.nodes[nodeId] = existing.copy(config = newConfig)
@@ -585,6 +611,32 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
             if (msgs.isNotEmpty()) dispatchScriptMessages(level, pos, msgs)
         }
 
+        // Phase 2b: replicated state deltas. The node was evaluated above; its
+        // per-node ScriptRuntime buffered any replicated-cell changes on the OWNED
+        // (fully-parked) branch after saveState (race-free). Drain per script node
+        // and send a small delta packet to players tracking this BE's chunk —
+        // bypasses the full-graph sendBlockUpdated path (spec §5.2/§5.4). On-change
+        // only: an empty drain sends nothing.
+        if (level is net.minecraft.server.level.ServerLevel) {
+            for (node in graph.nodes.values) {
+                if (node.typeKey.path != "script") continue
+                val nodeState = eval.nodeState(node.id) ?: continue
+                val deltas = dev.nitka.nodewire.script.ScriptNodeRuntime.drainReplicatedDeltas(nodeState)
+                if (deltas.isEmpty()) continue
+                val cellDeltas = deltas.map {
+                    dev.nitka.nodewire.net.CellDelta(
+                        it.key, it.kind,
+                        dev.nitka.nodewire.script.ScriptModuleReplication.encodeCell(it),
+                    )
+                }
+                net.neoforged.neoforge.network.PacketDistributor.sendToPlayersTrackingChunk(
+                    level,
+                    net.minecraft.world.level.ChunkPos(pos),
+                    dev.nitka.nodewire.net.StateDeltaPacket(pos, node.id, cellDeltas),
+                )
+            }
+        }
+
         // Component G: poll each script node's compile status (computed off the
         // tick thread in ScriptNodeRuntime) and stamp a compact diagnostics
         // summary into its config when it changes. Done here, on the server
@@ -838,10 +890,45 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
                 .orElse(emptyList())
             remoteRedstoneBindings.addAll(list)
         }
+        // Phase 2b.3b: CLIENT-only — consume the late-joiner replicated-state
+        // piggyback from getUpdateTag, staging current values BEFORE any client
+        // runtime (2c) reads, so a fresh client starts from current state not init.
+        // Server reads never see this key (it's only written by getUpdateTag).
+        if (level?.isClientSide == true && tag.contains(REPLICATED_STATE_KEY)) {
+            val repl = tag.getCompound(REPLICATED_STATE_KEY)
+            for (key in repl.allKeys) {
+                val nodeId = runCatching { java.util.UUID.fromString(key) }.getOrNull() ?: continue
+                if (nodeId !in graph.nodes) continue
+                clientReplicatedState.getOrPut(nodeId) { CompoundTag() }.merge(repl.getCompound(key))
+            }
+        }
         invalidateEvaluator()
     }
 
-    override fun getUpdateTag(registries: net.minecraft.core.HolderLookup.Provider): CompoundTag = saveWithoutMetadata(registries)
+    override fun getUpdateTag(registries: net.minecraft.core.HolderLookup.Provider): CompoundTag {
+        val tag = saveWithoutMetadata(registries)
+        // Phase 2b.3b: piggyback CURRENT replicated values so a client that loads
+        // the chunk AFTER the last change starts from current state, not `init`.
+        // The per-node `state` tag is the server evaluator's private scratch (NOT
+        // in NodeGraph.CODEC), so without this a late joiner is stuck at init.
+        // Ship ONLY replicated keys (server-only cells never leak). Keep it tiny.
+        val ev = serverEvaluator
+        if (ev != null) {
+            val repl = CompoundTag()
+            for ((id, node) in graph.nodes) {
+                if (node.typeKey.path != "script") continue
+                val nodeState = ev.nodeState(id) ?: continue
+                val keys = dev.nitka.nodewire.script.ScriptNodeRuntime
+                    .replicatedKeys(node.config.getString("src"))
+                if (keys.isEmpty()) continue
+                val sub = dev.nitka.nodewire.script.ScriptModuleReplication
+                    .buildReplicatedSubTag(nodeState, keys)
+                if (!sub.isEmpty) repl.put(id.toString(), sub)
+            }
+            if (!repl.isEmpty) tag.put(REPLICATED_STATE_KEY, repl)
+        }
+        return tag
+    }
 
     override fun getUpdatePacket(): Packet<ClientGamePacketListener>? =
         ClientboundBlockEntityDataPacket.create(this)
@@ -948,6 +1035,9 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
 
     companion object {
         private const val MAX_NAME_LENGTH = 64
+
+        /** getUpdateTag sub-tag (node-id -> replicated cell values) for late joiners (2b.3b). */
+        private const val REPLICATED_STATE_KEY = "nw_replicated_state"
         private val DIRECTIONS_BY_NAME = Direction.entries.associateBy { it.name.lowercase() }
 
         /**

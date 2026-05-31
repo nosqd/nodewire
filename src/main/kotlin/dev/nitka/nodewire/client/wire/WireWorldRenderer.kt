@@ -439,6 +439,7 @@ object WireWorldRenderer {
         PinType.VEC2 -> 0xFF_7C_E8_5C.toInt()
         PinType.VEC3 -> 0xFF_AC_E8_5C.toInt()
         PinType.QUAT -> 0xFF_C8_7C_E8.toInt()
+        PinType.VIDEO -> 0xFF_4A_4A_F0.toInt()
         // Neutral light-gray for ANY — channel wires generally avoid ANY,
         // but if one ever appears the wire should still render visibly.
         PinType.ANY -> 0xFF_9C_A3_AF.toInt()

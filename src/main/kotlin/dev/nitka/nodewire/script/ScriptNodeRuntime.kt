@@ -119,6 +119,23 @@ object ScriptNodeRuntime {
         return rt.rendezvous(inputs, state, outputPins)
     }
 
+    /**
+     * Replicated deltas the node keyed by [state] produced on its last OWNED tick.
+     * Empty if there's no live runtime or the node skipped this tick. Keyed by the
+     * SAME tag instance the runtime is keyed by (identity), so the host passes the
+     * evaluator's `nodeState(id)`. Server-thread only.
+     */
+    fun drainReplicatedDeltas(state: CompoundTag): List<ScriptModule.ReplicatedDelta> =
+        runtimes[state]?.takeReplicatedDeltas() ?: emptyList()
+
+    /**
+     * The `replicated = true` cell keys for [src]'s compiled module, or empty if
+     * not compiled yet. Used by the late-joiner getUpdateTag piggyback to filter
+     * a node's full state tag to the client-shippable subset. Side-effect-free.
+     */
+    fun replicatedKeys(src: String): List<String> =
+        (cache[src] as? Entry.Ready)?.module?.replicatedKeys() ?: emptyList()
+
     /** Cancel + drop the per-node runtime for a specific node (its `state` tag). */
     fun cancelForState(state: CompoundTag) {
         runtimes.remove(state)?.cancel()

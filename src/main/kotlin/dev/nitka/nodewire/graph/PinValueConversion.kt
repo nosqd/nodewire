@@ -54,6 +54,7 @@ object PinValueConversion {
         is PinValue.Vec2 -> PinType.VEC2
         is PinValue.Vec3 -> PinType.VEC3
         is PinValue.Quat -> PinType.QUAT
+        is PinValue.Video -> PinType.VIDEO
     }
 
     private fun convertScalar(value: PinValue, from: PinType, to: PinType): PinValue? {

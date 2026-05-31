@@ -25,6 +25,7 @@ fun ScriptType.toPinType(): PinType = when (this) {
     ScriptType.VEC2 -> PinType.VEC2
     ScriptType.VEC3 -> PinType.VEC3
     ScriptType.QUAT -> PinType.QUAT
+    ScriptType.VIDEO -> PinType.VIDEO
 }
 
 /** PinValue (graph) -> script-facing boxed value, stored into [ScriptModule.inputs]. */
@@ -99,6 +100,7 @@ private fun unbox(v: PinValue): Any = when (v) {
     is PinValue.Vec2 -> Vec2(v.x, v.y)
     is PinValue.Vec3 -> Vec3(v.x, v.y, v.z)
     is PinValue.Quat -> Quat(v.x, v.y, v.z, v.w)
+    is PinValue.Video -> Video(v.handle)
 }
 
 /**
@@ -115,6 +117,7 @@ private fun box(value: Any?, type: PinType): PinValue = when (type) {
     PinType.VEC2 -> (value as Vec2).let { PinValue.Vec2(it.x, it.y) }
     PinType.VEC3 -> (value as Vec3).let { PinValue.Vec3(it.x, it.y, it.z) }
     PinType.QUAT -> (value as Quat).let { PinValue.Quat(it.x, it.y, it.z, it.w) }
+    PinType.VIDEO -> PinValue.Video((value as Video).handle)
     PinType.ANY -> value as PinValue
 }
 
@@ -128,5 +131,6 @@ private fun boxDefault(type: PinType): Any = when (type) {
     PinType.VEC2 -> Vec2(0f, 0f)
     PinType.VEC3 -> Vec3(0f, 0f, 0f)
     PinType.QUAT -> Quat.IDENTITY
+    PinType.VIDEO -> Video.NONE
     PinType.ANY -> false
 }

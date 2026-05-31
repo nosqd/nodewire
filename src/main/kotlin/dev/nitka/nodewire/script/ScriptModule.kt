@@ -35,6 +35,7 @@ inline fun <reified T> scriptPinType(): ScriptType = when (T::class) {
     Vec2::class -> ScriptType.VEC2
     Vec3::class -> ScriptType.VEC3
     Quat::class -> ScriptType.QUAT
+    Video::class -> ScriptType.VIDEO
     // PinValue::class / Any::class -> ANY  (wired when ANY-pins land; spec §12)
     else -> throw ScriptDeclException("unsupported pin type ${T::class.simpleName}")
 }
@@ -64,6 +65,56 @@ abstract class ScriptModule {
     @PublishedApi internal val outputs = LinkedHashMap<String, Any?>()
 
     internal val stateCells = ArrayList<StateCell<*>>()
+
+    /**
+     * One replicated cell that changed since the last drain. [value] is the raw
+     * cell value (Int/Float/Boolean/String/Redstone) — serialized by the host
+     * ([ScriptModuleReplication.encodeCell]) into a single-key NBT tag.
+     *
+     * NESTED on [ScriptModule] on purpose so it resolves as
+     * `ScriptModule.ReplicatedDelta` from the host helper + runtime — ONE
+     * canonical location (do not also declare a top-level one).
+     */
+    data class ReplicatedDelta(val key: String, val kind: StateKind, val value: Any?)
+
+    /** key -> last value pushed to clients. Built/refreshed by [snapshotReplicated]. */
+    private val lastReplicated = HashMap<String, Any?>()
+
+    /**
+     * Seed the baseline from the current replicated-cell values. Called once when
+     * the per-node runtime first attaches AFTER [loadState] (so the first real
+     * change diffs loaded-vs-loaded, not init-vs-loaded — no spurious delta of
+     * the persisted value on chunk-load). See spec §5.2.
+     */
+    @PublishedApi internal fun snapshotReplicated() {
+        for (cell in stateCells) if (cell.replicated) lastReplicated[cell.key] = cell.value
+    }
+
+    /**
+     * Collect replicated cells whose value changed since the last drain, and
+     * advance the baseline. PURE (no networking) — the host calls it at the tick
+     * boundary, only on the OWNED (fully-parked) branch after [saveState], so the
+     * read of `cell.value` is race-free (spec §5.2).
+     */
+    @PublishedApi internal fun drainReplicatedDeltas(): List<ReplicatedDelta> {
+        var out: ArrayList<ReplicatedDelta>? = null
+        for (cell in stateCells) {
+            if (!cell.replicated) continue
+            val prev = lastReplicated[cell.key]
+            val now = cell.value
+            if (!lastReplicated.containsKey(cell.key) || prev != now) {
+                lastReplicated[cell.key] = now
+                (out ?: ArrayList<ReplicatedDelta>().also { out = it })
+                    .add(ReplicatedDelta(cell.key, cell.kind, now))
+            }
+        }
+        return out ?: emptyList()
+    }
+
+    /** The keys of every `replicated = true` cell (for the late-joiner getUpdateTag
+     *  piggyback — ship ONLY these, never server-only cells). */
+    internal fun replicatedKeys(): List<String> =
+        stateCells.filter { it.replicated }.map { it.key }
 
     @PublishedApi internal var tickBlock: (() -> Unit)? = null
 

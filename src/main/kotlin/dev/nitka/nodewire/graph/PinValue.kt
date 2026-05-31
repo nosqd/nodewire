@@ -50,6 +50,10 @@ sealed class PinValue {
         override val type = PinType.QUAT
     }
 
+    data class Video(val handle: java.util.UUID) : PinValue() {
+        override val type = PinType.VIDEO
+    }
+
     companion object {
         /** Zero-value for [type] — used as the default for a freshly-spawned node's input pins. */
         fun default(type: PinType): PinValue = when (type) {
@@ -61,6 +65,7 @@ sealed class PinValue {
             PinType.VEC2 -> Vec2(0f, 0f)
             PinType.VEC3 -> Vec3(0f, 0f, 0f)
             PinType.QUAT -> Quat(0f, 0f, 0f, 1f)
+            PinType.VIDEO -> Video(java.util.UUID(0L, 0L))
             // ANY has no canonical value — Bool(false) is the cheapest
             // no-signal placeholder. Callers should usually avoid asking
             // for default(ANY); the framework treats unconnected ANY-pins
@@ -118,6 +123,11 @@ sealed class PinValue {
                     com.mojang.serialization.Codec.FLOAT.fieldOf("w").forGetter(Quat::w),
                 ).apply(i, ::Quat)
             }
+        private val VideoCodec: com.mojang.serialization.MapCodec<Video> =
+            com.mojang.serialization.codecs.RecordCodecBuilder.mapCodec { i ->
+                i.group(net.minecraft.core.UUIDUtil.CODEC.fieldOf("h").forGetter(Video::handle))
+                    .apply(i, ::Video)
+            }
 
         /**
          * Sealed dispatch: emits a `type` field plus the variant's fields
@@ -139,6 +149,7 @@ sealed class PinValue {
             is Vec2     -> "vec2"
             is Vec3     -> "vec3"
             is Quat     -> "quat"
+            is Video    -> "video"
         }
 
         private fun codecFor(key: String): com.mojang.serialization.MapCodec<out PinValue> = when (key) {
@@ -150,6 +161,7 @@ sealed class PinValue {
             "vec2"     -> Vec2Codec
             "vec3"     -> Vec3Codec
             "quat"     -> QuatCodec
+            "video"    -> VideoCodec
             else       -> error("Unknown PinValue type key: $key")
         }
     }

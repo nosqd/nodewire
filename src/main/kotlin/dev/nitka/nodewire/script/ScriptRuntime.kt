@@ -53,6 +53,16 @@ class ScriptRuntime(
     /** Last frame pushed to the graph; reused on skip ticks (backpressure). */
     private var lastOutputs: Map<String, PinValue> = emptyMap()
 
+    /** Per-node replicated deltas produced on the LAST owned tick (drained inside
+     *  the owned rendezvous branch after saveState — the only race-free point).
+     *  Buffered here; the host drains it via [takeReplicatedDeltas]. */
+    private var pendingDeltas: List<ScriptModule.ReplicatedDelta> = emptyList()
+
+    /** Take + clear the replicated deltas produced on the last owned tick.
+     *  Empty if the node skipped this tick. Server-thread only. */
+    fun takeReplicatedDeltas(): List<ScriptModule.ReplicatedDelta> =
+        pendingDeltas.also { pendingDeltas = emptyList() }
+
     /** Realize the body's behaviors. Idempotent; called on first rendezvous. */
     private fun ensureAttached() {
         if (!attached) {
@@ -79,6 +89,10 @@ class ScriptRuntime(
         if (!stateLoaded) {
             module.loadState(state)
             stateLoaded = true
+            // Seed the replicated baseline from the LOADED values (spec §5.2): the
+            // first owned-tick diff is loaded-vs-loaded, so a chunk-load of the
+            // persisted value emits no spurious delta.
+            module.snapshotReplicated()
         }
         // First attach: snapshot inputs BEFORE launching behaviors, so a body that
         // reads `input.value` during its setup pass (before its first park) sees the
@@ -110,6 +124,10 @@ class ScriptRuntime(
         module.drainMessages().let { if (it.isNotEmpty()) ScriptMessageSink.add(it) }
         // 4. save state (safe for the same reason — no behavior mid-mutation, spec R3).
         module.saveState(state)
+        // 4b. drain replicated deltas HERE — the only race-free point (fully parked,
+        //     no behavior running, same happens-before as saveState). Buffer for the
+        //     host to send (spec §5.2). NEVER drain on a skipped node (torn read).
+        pendingDeltas = module.drainReplicatedDeltas()
         // 5. advance: resume the parked behaviors; they run on the worker until their
         //    next park (commit-at-suspend). The server returns immediately (no wait).
         clock.advance()

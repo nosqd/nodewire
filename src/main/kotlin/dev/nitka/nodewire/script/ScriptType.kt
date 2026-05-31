@@ -27,4 +27,5 @@ enum class ScriptType {
     VEC2,
     VEC3,
     QUAT,
+    VIDEO,
 }

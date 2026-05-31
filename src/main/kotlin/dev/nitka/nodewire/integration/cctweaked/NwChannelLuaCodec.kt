@@ -29,6 +29,7 @@ object NwChannelLuaCodec {
             "z" to value.z.toDouble(),
             "w" to value.w.toDouble(),
         )
+        is PinValue.Video    -> value.handle.toString()
     }
 
     fun fromLua(lua: Any?, type: PinType): PinValue = when (type) {
@@ -40,6 +41,7 @@ object NwChannelLuaCodec {
         )
         PinType.STRING   -> PinValue.Str(asString(lua, "string"))
         PinType.ANY      -> error("ANY should never appear as a CC channel pin type")
+        PinType.VIDEO    -> PinValue.Video(java.util.UUID.fromString(asString(lua, "video")))
         PinType.VEC2     -> {
             val m = asMap(lua, "vec2")
             PinValue.Vec2(

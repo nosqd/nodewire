@@ -159,6 +159,7 @@ private fun aeroChannelPinColor(type: PinType): Color = when (type) {
     PinType.VEC2 -> NwTheme.colors.pinVec2
     PinType.VEC3 -> NwTheme.colors.pinVec3
     PinType.QUAT -> NwTheme.colors.pinQuat
+    PinType.VIDEO -> NwTheme.colors.pinVideo
     // ANY pins are not exposed by Aero channels — neutral fallback so the
     // UI degrades gracefully if a future channel ever advertises ANY.
     PinType.ANY -> NwTheme.colors.pinAny

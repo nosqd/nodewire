@@ -6,6 +6,8 @@ import dev.nitka.nodewire.script.VideoCanvas
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
 import org.joml.Matrix4f
+import org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT
+import org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT
 import java.util.UUID
 
 /**
@@ -78,7 +80,12 @@ object VideoFrameRenderer {
         mv.pushMatrix()
         mv.identity()
         RenderSystem.applyModelViewMatrix()
-        RenderSystem.disableDepthTest()
+        // Clear the FBO's colour + DEPTH. GuiGraphics layers fills under text via
+        // per-layer Z + the depth buffer; a stale (uncleared) FBO depth makes a
+        // later fill (the background) win the depth test and HIDE the text. Don't
+        // disable depth test — the GUI render types manage it themselves.
+        RenderSystem.clearColor(0f, 0f, 0f, 0f)
+        RenderSystem.clear(GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX)
         RenderSystem.enableBlend()
         RenderSystem.defaultBlendFunc()
         val gfx = GuiGraphics(mc, mc.renderBuffers().bufferSource())

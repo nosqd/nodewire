@@ -1,8 +1,11 @@
 package dev.nitka.nodewire.client.video
 
+import com.mojang.blaze3d.systems.RenderSystem
+import com.mojang.blaze3d.vertex.VertexSorting
 import dev.nitka.nodewire.script.VideoCanvas
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
+import org.joml.Matrix4f
 import java.util.UUID
 
 /**
@@ -54,19 +57,43 @@ object VideoFrameRenderer {
         // of scope for the foundation). Kotlin maps the property to the getter.
         val mainTarget = mc.mainRenderTarget
 
+        // We draw during RenderLevelStage — the world's 3D perspective projection
+        // + camera modelview are live. GuiGraphics expects a 2D GUI ortho with a
+        // top-left, y-down origin and an identity modelview; without swapping them
+        // every fillRect/text is transformed by the 3D matrices and lands off the
+        // surface, leaving the FBO at its cleared (black) state — a black face with
+        // nothing on it. Save, set a surface-sized ortho + identity modelview,
+        // restore in finally.
+        val savedProj = RenderSystem.getProjectionMatrix()
+        val savedSort = RenderSystem.getVertexSorting()
+        val mv = RenderSystem.getModelViewStack()
+
         // bindWrite(true) sets the viewport to the target's size (the standard
         // square), so GuiGraphics draws land in surface space.
         target.bindWrite(/* setViewport = */ true)
+        RenderSystem.setProjectionMatrix(
+            Matrix4f().setOrtho(0f, surface.width.toFloat(), surface.height.toFloat(), 0f, -1000f, 1000f),
+            VertexSorting.ORTHOGRAPHIC_Z,
+        )
+        mv.pushMatrix()
+        mv.identity()
+        RenderSystem.applyModelViewMatrix()
+        RenderSystem.disableDepthTest()
+        RenderSystem.enableBlend()
+        RenderSystem.defaultBlendFunc()
         val gfx = GuiGraphics(mc, mc.renderBuffers().bufferSource())
         try {
             val canvas = dev.nitka.nodewire.ui.render.NwCanvas(gfx, mc.font)
             block(NwCanvasVideoCanvas(canvas, surface.width))
             gfx.flush()
         } finally {
-            // Restore prior GL state EVEN IF block threw (F6): flush is best-effort
-            // already done in try; here we always unbind + rebind the main target.
+            // Restore prior GL state EVEN IF block threw (F6).
             target.unbindWrite()
             mainTarget.bindWrite(/* setViewport = */ true)
+            mv.popMatrix()
+            RenderSystem.applyModelViewMatrix()
+            RenderSystem.setProjectionMatrix(savedProj, savedSort)
+            RenderSystem.enableDepthTest()
         }
         return true
     }

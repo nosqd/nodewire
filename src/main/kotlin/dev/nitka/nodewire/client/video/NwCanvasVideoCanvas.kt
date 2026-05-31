@@ -1,8 +1,16 @@
 package dev.nitka.nodewire.client.video
 
+import com.mojang.blaze3d.systems.RenderSystem
+import com.mojang.blaze3d.vertex.BufferUploader
+import com.mojang.blaze3d.vertex.DefaultVertexFormat
+import com.mojang.blaze3d.vertex.Tesselator
+import com.mojang.blaze3d.vertex.VertexFormat
+import dev.nitka.nodewire.script.Video
 import dev.nitka.nodewire.script.VideoCanvas
 import dev.nitka.nodewire.ui.render.Color
 import dev.nitka.nodewire.ui.render.NwCanvas
+import net.minecraft.client.renderer.GameRenderer
+import java.util.UUID
 
 /**
  * GL-backed [VideoCanvas] over the mod's existing 2D primitive surface
@@ -25,6 +33,9 @@ class NwCanvasVideoCanvas(
     private val dtSeconds: Float = 0f,
     private val timeSeconds: Float = 0f,
     private val frameIndex: Long = 0L,
+    /** The handle this canvas draws INTO — used to reject a self-blit (a video
+     *  drawn into itself would read+write the same FBO). */
+    private val destHandle: UUID = UUID(0L, 0L),
 ) : VideoCanvas {
 
     override fun width(): Int = size
@@ -78,6 +89,39 @@ class NwCanvasVideoCanvas(
             color.toColor(),
             shadow = false,
         )
+    }
+
+    override fun image(video: Video, x: Int, y: Int, w: Int, h: Int) {
+        // Self-blit would sample + write the same FBO — skip.
+        if (video.handle == destHandle) return
+        val r = VideoDrawClamps.rect(x, y, w, h, size)
+        if (r.w <= 0 || r.h <= 0) return
+        val src = VideoManager.getOrCreate(video.handle) as? GlVideoSurface ?: return
+        val texId = src.colorTextureId()
+        if (texId <= 0) return
+
+        // Flush GuiGraphics draws buffered BEFORE this call (e.g. a clear()) so
+        // they land UNDER the feed; the textured quad below draws immediately to
+        // the bound FBO, and later verbs flush on top at the end of the frame.
+        nw.flush()
+
+        val x0 = r.x.toFloat()
+        val y0 = r.y.toFloat()
+        val x1 = (r.x + r.w).toFloat()
+        val y1 = (r.y + r.h).toFloat()
+        RenderSystem.enableBlend()
+        RenderSystem.defaultBlendFunc()
+        RenderSystem.disableCull()
+        RenderSystem.setShader { GameRenderer.getPositionTexShader() }
+        RenderSystem.setShaderTexture(0, texId)
+        RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
+        val buf = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX)
+        // FBO colour textures are bottom-up → flip V so the source shows upright.
+        buf.addVertex(x0, y0, 0f).setUv(0f, 1f) // top-left
+        buf.addVertex(x0, y1, 0f).setUv(0f, 0f) // bottom-left
+        buf.addVertex(x1, y1, 0f).setUv(1f, 0f) // bottom-right
+        buf.addVertex(x1, y0, 0f).setUv(1f, 1f) // top-right
+        BufferUploader.drawWithShader(buf.buildOrThrow())
     }
 
     /** Narrow the low 32 bits of the packed-ARGB `Long` to the mod's [Color]. */

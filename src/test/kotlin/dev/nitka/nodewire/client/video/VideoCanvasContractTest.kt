@@ -37,6 +37,10 @@ class VideoCanvasContractTest {
         }
         override fun line(x1: Int, y1: Int, x2: Int, y2: Int, color: Long) {}
         override fun text(s: String, x: Int, y: Int, color: Long) { texts += VideoDrawClamps.text(s) }
+        override fun image(video: dev.nitka.nodewire.script.Video, x: Int, y: Int, w: Int, h: Int) {
+            val r = VideoDrawClamps.rect(x, y, w, h, size)
+            rects += RectCall(r.x, r.y, r.w, r.h)
+        }
     }
 
     @Test

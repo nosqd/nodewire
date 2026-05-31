@@ -24,6 +24,7 @@ class VideoDrawBufferTest {
         override fun border(x: Int, y: Int, w: Int, h: Int, thickness: Int, color: Long) { ops += "border" }
         override fun line(x1: Int, y1: Int, x2: Int, y2: Int, color: Long) { ops += "line" }
         override fun text(s: String, x: Int, y: Int, color: Long) { ops += "text($s)" }
+        override fun image(video: Video, x: Int, y: Int, w: Int, h: Int) { ops += "image" }
     }
 
     private class M(val target: Video) : ScriptModule() {

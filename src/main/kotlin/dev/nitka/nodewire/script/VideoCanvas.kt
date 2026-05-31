@@ -57,6 +57,22 @@ interface VideoCanvas {
     /** Single-line [s] at (x, y), packed-ARGB [color]. Over-long text is truncated. */
     fun text(s: String, x: Int, y: Int, color: Long)
 
+    /**
+     * Blit another [Video]'s current frame into this surface, scaled into the
+     * rect (x, y, w, h). This is the only way to *pass through* a camera/stream
+     * feed (e.g. an `input<Video>`) and then draw HUD on top of it.
+     *
+     * Drawing this surface into itself is ignored (no GL read-write feedback).
+     * Unlike a raw `blit`, the source is a [Video] handle the script already
+     * holds via a pin — never an arbitrary asset — so it stays inside the
+     * sandbox (the F4 cut was about `ResourceLocation` loading, not video→video).
+     * Coords/sizes are clamped like every other verb.
+     */
+    fun image(video: Video, x: Int, y: Int, w: Int, h: Int)
+
+    /** Blit [video] to fill the whole surface. */
+    fun image(video: Video) = image(video, 0, 0, width(), height())
+
     // ── timing helpers (real wall-clock; for FPS counters + time-based animation) ──
 
     /** Wall-clock seconds since this surface's PREVIOUS draw (0 on the first

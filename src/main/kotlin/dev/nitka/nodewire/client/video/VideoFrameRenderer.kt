@@ -111,6 +111,7 @@ object VideoFrameRenderer {
                     dtSeconds = dt,
                     timeSeconds = (now - first) / 1000f,
                     frameIndex = frames,
+                    destHandle = handle,
                 ),
             )
             gfx.flush()

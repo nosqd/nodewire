@@ -59,16 +59,10 @@ class ScreenBlockRenderer(
 
         poseStack.pushPose()
         val matrix = poseStack.last().pose()
-        // Lit texture WITH a self-emission floor: a monitor glows, so clamp the
-        // block-light component up to MIN_BLOCK_LIGHT before blitting. The screen
-        // still brightens with environment light (sky component kept) but never
-        // dims below readable in shadow — full lightmap modulation made the whole
-        // content (camera feed included) almost invisible in dim areas.
-        val lit = LightTexture.pack(
-            maxOf(LightTexture.block(light), MIN_BLOCK_LIGHT),
-            LightTexture.sky(light),
-        )
-        emitFace(consumer, matrix, facing, lit)
+        // FULL_BRIGHT: the screen is a self-illuminated monitor — content (camera
+        // feed + HUD) renders at full brightness regardless of environment light.
+        // Lightmap modulation made it too dim in shadow, so we emit at full.
+        emitFace(consumer, matrix, facing, LightTexture.FULL_BRIGHT)
         poseStack.popPose()
     }
 
@@ -150,9 +144,6 @@ class ScreenBlockRenderer(
     }
 
     companion object {
-        /** Self-emission floor (block-light units, 0..15) so a screen stays
-         *  readable in the dark while still brightening with environment light. */
-        private const val MIN_BLOCK_LIGHT = 14
         /**
          * A textured, lit render type bound to a **raw GL texture id**. The setup
          * shard binds the FBO colour attachment to sampler 0; the clear shard is a

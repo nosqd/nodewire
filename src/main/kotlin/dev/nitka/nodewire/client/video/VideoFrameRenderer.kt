@@ -102,6 +102,13 @@ object VideoFrameRenderer {
         // tinted ("gradient"/wrong colour) — intermittently, depending on the
         // world frame's leftover state. Force the modulator white for the pass.
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
+        // 2D pass: make DRAW ORDER authoritative, not depth. The camera blit
+        // (image()) is immediate and writes depth at z=0; the HUD fills/text are
+        // batched GuiGraphics drawn at the same z, so with depth-test on, full-
+        // surface fills (the telemetry strips) lost the depth tie and vanished
+        // under the camera. Disable depth for the pass — fills/text then layer
+        // purely by issue order (bg before text in the script), restored after.
+        RenderSystem.disableDepthTest()
         val gfx = GuiGraphics(mc, mc.renderBuffers().bufferSource())
         try {
             val now = net.minecraft.Util.getMillis()

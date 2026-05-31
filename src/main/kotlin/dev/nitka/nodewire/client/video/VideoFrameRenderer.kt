@@ -37,6 +37,13 @@ import java.util.UUID
  */
 object VideoFrameRenderer {
 
+    /** Per-handle frame timing for the [VideoCanvas] dt()/time()/frames() helpers.
+     *  Render-thread only (no sync needed); a leaked entry per never-freed handle
+     *  is negligible. */
+    private val firstMs = HashMap<UUID, Long>()
+    private val lastMs = HashMap<UUID, Long>()
+    private val frameCount = HashMap<UUID, Long>()
+
     /**
      * Bind [handle]'s FBO, run [block] against a [VideoCanvas], then unbind and
      * restore the previous main target. No-op (returns false) when [VideoManager]
@@ -90,8 +97,22 @@ object VideoFrameRenderer {
         RenderSystem.defaultBlendFunc()
         val gfx = GuiGraphics(mc, mc.renderBuffers().bufferSource())
         try {
+            val now = net.minecraft.Util.getMillis()
+            val first = firstMs.getOrPut(handle) { now }
+            val dt = lastMs[handle]?.let { (now - it) / 1000f } ?: 0f
+            lastMs[handle] = now
+            val frames = frameCount[handle] ?: 0L
+            frameCount[handle] = frames + 1
             val canvas = dev.nitka.nodewire.ui.render.NwCanvas(gfx, mc.font)
-            block(NwCanvasVideoCanvas(canvas, surface.width))
+            block(
+                NwCanvasVideoCanvas(
+                    canvas,
+                    surface.width,
+                    dtSeconds = dt,
+                    timeSeconds = (now - first) / 1000f,
+                    frameIndex = frames,
+                ),
+            )
             gfx.flush()
         } finally {
             // Restore prior GL state EVEN IF block threw (F6).

@@ -22,11 +22,20 @@ import dev.nitka.nodewire.ui.render.NwCanvas
 class NwCanvasVideoCanvas(
     private val nw: NwCanvas,
     private val size: Int = VideoManager.STANDARD_SIZE,
+    private val dtSeconds: Float = 0f,
+    private val timeSeconds: Float = 0f,
+    private val frameIndex: Long = 0L,
 ) : VideoCanvas {
 
     override fun width(): Int = size
 
     override fun height(): Int = size
+
+    override fun dt(): Float = dtSeconds
+
+    override fun time(): Float = timeSeconds
+
+    override fun frames(): Long = frameIndex
 
     override fun clear(color: Long) {
         // Full-surface fill (the `clear` GAP verb — spec §2). The bound FBO is

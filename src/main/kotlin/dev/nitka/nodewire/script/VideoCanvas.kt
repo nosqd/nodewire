@@ -56,4 +56,21 @@ interface VideoCanvas {
 
     /** Single-line [s] at (x, y), packed-ARGB [color]. Over-long text is truncated. */
     fun text(s: String, x: Int, y: Int, color: Long)
+
+    // ── timing helpers (real wall-clock; for FPS counters + time-based animation) ──
+
+    /** Wall-clock seconds since this surface's PREVIOUS draw (0 on the first
+     *  draw). Use it to advance animation per real time: `x += speed * dt()`. */
+    fun dt(): Float = 0f
+
+    /** Total wall-clock seconds since this surface was first drawn. */
+    fun time(): Float = 0f
+
+    /** How many times this surface has been drawn (monotonic frame index). */
+    fun frames(): Long = 0L
+
+    /** Convenience: this surface's redraw rate = `1 / dt()` (0 on the first
+     *  draw). Note this is the SURFACE's update rate (capped by the runtime's
+     *  cadence), not the client's raw render FPS. */
+    fun fps(): Float = dt().let { if (it > 0f) 1f / it else 0f }
 }

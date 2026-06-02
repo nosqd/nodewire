@@ -35,26 +35,33 @@ object DhCaptureGuard {
     @Synchronized
     private fun resolveOnce() {
         if (resolved) return
-        resolved = true
         if (!ModList.get().isLoaded("distanthorizons")) {
-            available = false; return
+            resolved = true; available = false; return
         }
         try {
-            // DhApi.Delayed is a public static nested class; .configs is a public
-            // static field on it; .graphics() returns a graphics-config object;
-            // .renderingEnabled() returns the IDhApiConfigValue<Boolean> we toggle.
-            val dhApi = Class.forName("com.seibel.distanthorizons.api.DhApi")
-            val delayed = dhApi.getField("Delayed").get(null)
-            val configs = delayed.javaClass.getField("configs").get(delayed)
+            // DhApi.Delayed is a nested CLASS (not a field). It owns a public
+            // static `configs` field of type IDhApiConfig. Then .graphics() ->
+            // .renderingEnabled() returns IDhApiConfigValue<Boolean> we toggle.
+            val delayedCls = Class.forName("com.seibel.distanthorizons.api.DhApi\$Delayed")
+            val configs = delayedCls.getField("configs").get(null)
+            if (configs == null) {
+                // DH classes are loaded but Delayed.configs is still null — DH
+                // hasn't finished its async init. DON'T set resolved=true: a later
+                // capture frame will see configs populated and succeed. Capture
+                // runs unguarded this frame.
+                LOG.info("[NW-CAMERA] Distant Horizons present but not yet initialized (Delayed.configs is null); will retry next frame")
+                return
+            }
             val graphics = configs.javaClass.getMethod("graphics").invoke(configs)
             val renderingEnabled = graphics.javaClass.getMethod("renderingEnabled").invoke(graphics)
             configValueInstance = renderingEnabled
             getValueMethod = renderingEnabled.javaClass.getMethod("getValue")
             setValueMethod = renderingEnabled.javaClass.getMethod("setValue", Any::class.java)
             available = true
+            resolved = true
             LOG.info("[NW-CAMERA] Distant Horizons detected — its LOD render will be turned OFF during camera captures (Vista technique)")
         } catch (t: Throwable) {
-            available = false
+            resolved = true; available = false
             LOG.warn("[NW-CAMERA] Distant Horizons present but its config API did not resolve; cameras may flicker or crash under DH: {}", t.toString())
         }
     }

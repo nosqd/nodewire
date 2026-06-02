@@ -183,6 +183,11 @@ object VideoCameraCapture {
             // DH-aware: temporarily disable Distant Horizons LOD rendering for the
             // whole capture pass (Vista technique). No-op if DH is absent.
             dev.nitka.nodewire.integration.distanthorizons.DhCaptureGuard.aroundCapture {
+            // Veil-aware: flip Veil's `renderingPerspective` flag so its
+            // FramebufferStack treats the capture as its own perspective render
+            // (which it already handles cleanly) instead of pushing/popping
+            // state our nested renderLevel doesn't match. No-op if Veil absent.
+            dev.nitka.nodewire.integration.veil.VeilCaptureGuard.aroundCapture {
             for (feed in active) {
                 try {
                     val target = feed.renderTarget() ?: continue
@@ -220,6 +225,7 @@ object VideoCameraCapture {
                     }
                 }
             }
+            } // end VeilCaptureGuard.aroundCapture
             } // end DhCaptureGuard.aroundCapture
         } finally {
             // --- RESTORE ---

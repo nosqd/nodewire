@@ -64,12 +64,14 @@ object VideoCameraCapture {
      *  nested capture pass (flicker / crash). When any of these is loaded we
      *  refuse to capture rather than corrupt their state. Lazily resolved once.
      *
-     *  Distant Horizons is NOT in this list — we handle it via
-     *  [dev.nitka.nodewire.integration.distanthorizons.DhCaptureGuard], which
-     *  temporarily disables DH rendering for the duration of the pass (Vista
-     *  technique, verified on this MC+NeoForge line). Veil still needs a Pseudo
-     *  mixin to be cap-compatible — TODO. */
-    private val INCOMPATIBLE_PIPELINE_MODS = listOf("veil")
+     *  Distant Horizons is handled via [DhCaptureGuard] (Vista's API-toggle).
+     *  Veil is handled via the [dev.nitka.nodewire.mixin.camera.MixinVeilPipelineLevelRenderer]
+     *  Pseudo mixin that OR-flags Veil's `isRenderingPerspective()` with our
+     *  `VideoManager.isCapturing()`, so Veil treats the capture as its own
+     *  perspective render (which its FramebufferStack already handles). Both
+     *  techniques come straight from the Vista mod (same MC+NeoForge line).
+     *  Empty for now; keep the list as a known-conflict carve-out. */
+    private val INCOMPATIBLE_PIPELINE_MODS = listOf<String>()
 
     /** Cached: which of [INCOMPATIBLE_PIPELINE_MODS] are loaded this session.
      *  Null = not resolved yet (ModList is queryable only after mod loading). */

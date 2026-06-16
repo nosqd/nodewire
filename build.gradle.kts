@@ -60,11 +60,9 @@ repositories {
         forRepository { maven { url = uri("https://api.modrinth.com/maven") } }
         filter { includeGroup("maven.modrinth") }
     }
-    // Curse Maven — for Create Aeronautics (not on independent maven).
-    exclusiveContent {
-        forRepository { maven { url = uri("https://www.cursemaven.com") } }
-        filter { includeGroup("curse.maven") }
-    }
+    // Curse Maven dropped: every mod we used to pull from it (Aeronautics,
+    // Tweaked Controllers) now comes from Modrinth — cursemaven.com answers
+    // 402 Payment Required for those monetized listings, which broke CI.
 }
 
 // The optional :scripting addon is loaded into core's dev runs (neoForge.mods
@@ -269,9 +267,11 @@ dependencies {
     runtimeOnly("maven.modrinth:create-aeronautics:1.2.1+mc1.21.1")
 
     // --- Create: Tweaked Controllers 1.2.7 (NeoForge 1.21.1) ---
-    // Project id 898849, file id 7958165 (Apr 20 2026 NeoForge build).
-    compileOnly("curse.maven:create-tweaked-controllers-898849:7958165")
-    runtimeOnly("curse.maven:create-tweaked-controllers-898849:7958165")
+    // Pulled from Modrinth, not Curse Maven: cursemaven.com now answers 402
+    // Payment Required for this monetized listing (same story as Aeronautics
+    // above). The Modrinth `1.21.1-1.2.7` build is the same artifact.
+    compileOnly("maven.modrinth:create-tweaked-controllers:1.21.1-1.2.7")
+    runtimeOnly("maven.modrinth:create-tweaked-controllers:1.21.1-1.2.7")
 
     // CC: Tweaked — peripheral integration (mod gated at runtime; module
     // compiles against the jar so source references resolve). squiddev's

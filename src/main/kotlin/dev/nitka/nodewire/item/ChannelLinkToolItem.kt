@@ -1,10 +1,9 @@
 package dev.nitka.nodewire.item
 
 import dev.nitka.nodewire.block.LogicBlockEntity
-import dev.nitka.nodewire.client.screen.ChannelPickerScreen
+import dev.nitka.nodewire.client.link.LinkHud
 import dev.nitka.nodewire.endpoint.EndpointRef
 import dev.nitka.nodewire.graph.PinType
-import dev.nitka.nodewire.graph.PinValueConversion
 import dev.nitka.nodewire.link.LinkContext
 import dev.nitka.nodewire.link.LinkPin
 import dev.nitka.nodewire.link.PinPorts
@@ -47,6 +46,13 @@ import net.neoforged.neoforge.network.PacketDistributor
  */
 class ChannelLinkToolItem(props: Properties) : Item(props) {
 
+    /** Tool modes, cycled with sneak+scroll. Class-level (not companion-nested)
+     *  so it reads as `ChannelLinkToolItem.Mode` from the client HUD. */
+    enum class Mode(val displayName: String) {
+        LINK("Link pins"),
+        PANEL("Screen panels"),
+    }
+
     /**
      * Runs *before* Block.use in the interaction order, so the editor screen
      * never opens while this tool is held. Returns SUCCESS to stop both
@@ -76,23 +82,64 @@ class ChannelLinkToolItem(props: Properties) : Item(props) {
             return InteractionResult.sidedSuccess(level.isClientSide)
         }
 
-        // ── LINK mode: all UX runs on the client; the server is contacted
-        // once, at bind commit. Stack NBT is just memory between two clicks.
+        // ── LINK mode: all UX runs on the client off the live [LinkHud] hover
+        // window (no picker screens). The server is contacted once, at bind
+        // commit. Stack NBT is just memory between the two clicks.
+        //   * RMB         → act on the HUD-highlighted pin (arm output, or
+        //                   commit when a source is already armed).
+        //   * Sneak + RMB → clear the armed source, or (none armed, Logic
+        //                   block) open the Link Manager.
         if (level.isClientSide) {
-            if (player.isShiftKeyDown) pickSource(stack, ctx) else pickTarget(stack, ctx)
+            if (player.isShiftKeyDown) secondaryAction(stack, ctx) else primaryAction(stack, ctx)
         }
         return InteractionResult.sidedSuccess(level.isClientSide)
     }
 
-    // ── source side (sneak + RMB) ─────────────────────────────────────────
+    // ── RMB: act on the HUD-highlighted pin ───────────────────────────────
 
-    private fun pickSource(stack: ItemStack, ctx: UseOnContext) {
+    /**
+     * Arm the highlighted OUTPUT pin (no source yet) or commit the highlighted
+     * INPUT pin to the armed source. The pin comes from [LinkHud], which tracks
+     * the crosshair block and only highlights active (type-compatible) pins —
+     * so this never needs to re-filter or open a picker.
+     */
+    private fun primaryAction(stack: ItemStack, ctx: UseOnContext) {
         val level = ctx.level
         val pos = ctx.clickedPos
+        val pin = LinkHud.highlightedPin()
+        if (pin == null) {
+            actionBar("Look at a block and scroll to a pin", true)
+            return
+        }
+        val armed = readArmedSource(stack)
+        if (armed == null) {
+            armSource(stack, level, pos, pin)
+            return
+        }
+        if (armed.source.payload.blockPos == pos) {
+            actionBar("Source and target must differ", true)
+            return
+        }
+        PacketDistributor.sendToServer(
+            BindPinPacket(armed.source, armed.pin, EndpointRef.from(level, pos), pin.id),
+        )
+        clearArmedSource(stack)
+        actionBar("Linking ${armed.label} → ${pin.label} @ (${pos.x},${pos.y},${pos.z})…", false)
+    }
 
-        // Logic block keeps its richer UI: the Link Manager lists this
-        // block's channel outputs (the same pins pinOutputs reports) plus
-        // existing bindings with remove buttons.
+    /**
+     * Sneak + RMB. Clears the armed source if one is set; otherwise a Logic
+     * block opens its Link Manager (channel outputs + existing-binding
+     * management), the one richer UI the inline flow keeps.
+     */
+    private fun secondaryAction(stack: ItemStack, ctx: UseOnContext) {
+        if (readArmedSource(stack) != null) {
+            clearArmedSource(stack)
+            actionBar("Source cleared", false)
+            return
+        }
+        val level = ctx.level
+        val pos = ctx.clickedPos
         val logicBe = level.getBlockEntity(pos) as? LogicBlockEntity
         if (logicBe != null) {
             Minecraft.getInstance().setScreen(
@@ -102,22 +149,8 @@ class ChannelLinkToolItem(props: Properties) : Item(props) {
                     armSource(stack, level, pos, LinkPin(picked, type))
                 },
             )
-            return
-        }
-
-        val port = PinPorts.at(level, pos, ctx.clickedFace)
-        val outs = port?.pinOutputs(LinkContext(level, pos, level.getBlockState(pos), ctx.clickedFace)).orEmpty()
-        when {
-            outs.isEmpty() -> actionBar("Nothing here exposes output pins", true)
-            outs.size == 1 -> armSource(stack, level, pos, outs[0])
-            else -> Minecraft.getInstance().setScreen(
-                ChannelPickerScreen(
-                    "Source pin",
-                    outs.map { ChannelPickerScreen.Option(it.id, it.type, it.label) },
-                ) { picked ->
-                    outs.firstOrNull { it.id == picked }?.let { armSource(stack, level, pos, it) }
-                },
-            )
+        } else {
+            actionBar("No armed source — right-click an output pin to arm one", true)
         }
     }
 
@@ -141,62 +174,6 @@ class ChannelLinkToolItem(props: Properties) : Item(props) {
             "Source: ${pin.label} [${pin.type.name.lowercase()}] @ (${pos.x},${pos.y},${pos.z}) — right-click a target",
             false,
         )
-    }
-
-    // ── target side (plain RMB) ───────────────────────────────────────────
-
-    private fun pickTarget(stack: ItemStack, ctx: UseOnContext) {
-        val level = ctx.level
-        val pos = ctx.clickedPos
-        val tag = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag()
-        val src = tag.getCompound(NBT_LINK_SOURCE)
-        if (!tag.contains(NBT_LINK_SOURCE) || src.isEmpty) {
-            actionBar("Arm a source first: sneak + right-click a block with output pins", true)
-            return
-        }
-        val source = EndpointRef.CODEC
-            .parse(NbtOps.INSTANCE, src.getCompound(SRC_ENDPOINT))
-            .result().orElse(null)
-        if (source == null) {
-            actionBar("Stored source is invalid — re-arm it", true)
-            return
-        }
-        val sourcePin = src.getString(SRC_PIN)
-        val srcType = PinType.fromName(src.getString(SRC_TYPE))
-        val srcLabel = src.getString(SRC_LABEL).ifEmpty { sourcePin }
-        if (source.payload.blockPos == pos) {
-            actionBar("Source and target must differ", true)
-            return
-        }
-
-        val port = PinPorts.at(level, pos, ctx.clickedFace)
-        val ins = port?.pinInputs(LinkContext(level, pos, level.getBlockState(pos), ctx.clickedFace))
-            .orEmpty()
-            .filter { PinValueConversion.canConvert(srcType, it.type) }
-
-        fun commit(pin: LinkPin) {
-            PacketDistributor.sendToServer(
-                BindPinPacket(source, sourcePin, EndpointRef.from(level, pos), pin.id),
-            )
-            val cleared = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag()
-            cleared.remove(NBT_LINK_SOURCE)
-            stack.set(DataComponents.CUSTOM_DATA, CustomData.of(cleared))
-            actionBar("Linking $srcLabel → ${pin.label} @ (${pos.x},${pos.y},${pos.z})…", false)
-        }
-
-        when {
-            ins.isEmpty() ->
-                actionBar("Nothing here accepts a ${srcType.name.lowercase()} pin", true)
-            ins.size == 1 -> commit(ins[0])
-            else -> Minecraft.getInstance().setScreen(
-                ChannelPickerScreen(
-                    "Target pin (${srcType.name.lowercase()})",
-                    ins.map { ChannelPickerScreen.Option(it.id, it.type, it.label) },
-                ) { picked ->
-                    ins.firstOrNull { it.id == picked }?.let(::commit)
-                },
-            )
-        }
     }
 
     // ── PANEL mode: two-corner screen resize (unchanged flow) ─────────────
@@ -303,6 +280,42 @@ class ChannelLinkToolItem(props: Properties) : Item(props) {
         private const val SRC_TYPE = "type"
         private const val SRC_LABEL = "label"
 
+        /** The armed source decoded from a tool stack: endpoint + pin id +
+         *  type (for the compatibility filter) + display label. */
+        data class ArmedSource(
+            val source: EndpointRef,
+            val pin: String,
+            val type: PinType,
+            val label: String,
+        )
+
+        /** Decode the armed source from [stack], or null if none / invalid.
+         *  Read by both the RMB commit and the [LinkHud] hover window. */
+        fun readArmedSource(stack: ItemStack): ArmedSource? {
+            val tag = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag()
+            if (!tag.contains(NBT_LINK_SOURCE)) return null
+            val src = tag.getCompound(NBT_LINK_SOURCE)
+            if (src.isEmpty) return null
+            val source = EndpointRef.CODEC
+                .parse(NbtOps.INSTANCE, src.getCompound(SRC_ENDPOINT))
+                .result().orElse(null) ?: return null
+            val pin = src.getString(SRC_PIN)
+            return ArmedSource(
+                source = source,
+                pin = pin,
+                type = PinType.fromName(src.getString(SRC_TYPE)),
+                label = src.getString(SRC_LABEL).ifEmpty { pin },
+            )
+        }
+
+        /** Drop the armed source from [stack] (sneak+RMB cancel, or post-commit). */
+        fun clearArmedSource(stack: ItemStack) {
+            val tag = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag()
+            if (!tag.contains(NBT_LINK_SOURCE)) return
+            tag.remove(NBT_LINK_SOURCE)
+            stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag))
+        }
+
         private const val NBT_TOOL_MODE = "toolMode"
 
         /** Pending first corner of the Screen-resize flow, per player (server
@@ -311,12 +324,6 @@ class ChannelLinkToolItem(props: Properties) : Item(props) {
 
         /** First corner expires after 30 s without the second click. */
         private const val SCREEN_RESIZE_TIMEOUT_TICKS = 600L
-
-        /** Tool modes, cycled with sneak+scroll. */
-        enum class Mode(val displayName: String) {
-            LINK("Link pins"),
-            PANEL("Screen panels"),
-        }
 
         /** The stack's current mode ([Mode.LINK] when unset/unknown). */
         fun readMode(stack: ItemStack): Mode {
@@ -353,11 +360,12 @@ class ChannelLinkToolItem(props: Properties) : Item(props) {
             Component.literal("Mode: ${readMode(stack).displayName}").withStyle(ChatFormatting.AQUA),
         )
         tooltip.add(
-            Component.literal("Sneak+RMB: pick source pin · RMB: pick target pin")
+            Component.literal("Look at a block · Scroll: choose pin · RMB: arm / connect")
                 .withStyle(ChatFormatting.DARK_GRAY),
         )
         tooltip.add(
-            Component.literal("Sneak+Scroll to switch mode").withStyle(ChatFormatting.DARK_GRAY),
+            Component.literal("Sneak+RMB: clear source / Link Manager · Sneak+Scroll: switch mode")
+                .withStyle(ChatFormatting.DARK_GRAY),
         )
         super.appendHoverText(stack, context, tooltip, flag)
     }

@@ -4,6 +4,8 @@ import com.mojang.blaze3d.platform.InputConstants
 import com.mojang.logging.LogUtils
 import dev.nitka.nodewire.client.command.HighlightCommand
 import dev.nitka.nodewire.client.highlight.BlockHighlightRenderer
+import dev.nitka.nodewire.client.link.LinkHud
+import dev.nitka.nodewire.client.link.LinkHudRenderer
 import dev.nitka.nodewire.client.script.ClientScriptCommand
 import dev.nitka.nodewire.client.screen.ScreenBlockRenderer
 import dev.nitka.nodewire.client.script.ClientScriptDriver
@@ -62,6 +64,8 @@ object NodewireClient {
         FORGE_BUS.addListener(::onLevelUnload)
         FORGE_BUS.addListener<RegisterClientCommandsEvent>(HighlightCommand::register)
         FORGE_BUS.addListener(::onMouseScroll)
+        // Channel Link Tool inline pin window — hover state + HUD draw.
+        FORGE_BUS.addListener<net.neoforged.neoforge.client.event.RenderGuiEvent.Post>(LinkHudRenderer::onRenderGui)
         LOG.info("Nodewire client handlers registered (MOD bus + FORGE bus)")
     }
 
@@ -69,6 +73,9 @@ object NodewireClient {
         // Video handle GC sweep — runs every client tick regardless of whether a
         // screen is open (the early-return below only gates the dev keybind).
         VideoManager.onClientTick()
+        // Refresh the Link Tool hover window from the crosshair (no-ops / clears
+        // itself when the tool isn't held or a screen is open).
+        LinkHud.update()
         if (Minecraft.getInstance().screen != null) return
         if (OPEN_DEMO_KEY.consumeClick()) {
             LOG.info("Opening DemoScreen")
@@ -88,19 +95,28 @@ object NodewireClient {
     }
 
     /**
-     * Sneak+scroll with the Channel Link Tool in the MAIN hand cycles the
-     * tool mode (LINK ↔ PANEL). Cancels the event (no hotbar scroll) and asks
-     * the SERVER to mutate the stack NBT — a client-side write would desync.
+     * Scroll with the Channel Link Tool in the MAIN hand:
+     *  * **Sneak+scroll** → cycle the tool mode (LINK ↔ PANEL). Server mutates
+     *    the stack NBT (a client-side write would desync).
+     *  * **Plain scroll** while the inline pin window has selectable pins →
+     *    move the highlight ([LinkHud]). Both cancel the event so the hotbar
+     *    doesn't also scroll; otherwise the event falls through to the hotbar.
      */
     private fun onMouseScroll(event: net.neoforged.neoforge.client.event.InputEvent.MouseScrollingEvent) {
         val player = Minecraft.getInstance().player ?: return
-        if (!player.isShiftKeyDown) return
         if (player.mainHandItem.item !is dev.nitka.nodewire.item.ChannelLinkToolItem) return
         val dy = event.scrollDeltaY
         if (dy == 0.0) return
-        event.isCanceled = true
-        net.neoforged.neoforge.network.PacketDistributor.sendToServer(
-            dev.nitka.nodewire.net.SetLinkToolModePacket(if (dy > 0) 1 else -1),
-        )
+        if (player.isShiftKeyDown) {
+            event.isCanceled = true
+            net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                dev.nitka.nodewire.net.SetLinkToolModePacket(if (dy > 0) 1 else -1),
+            )
+            return
+        }
+        if (LinkHud.hasActive()) {
+            event.isCanceled = true
+            LinkHud.scroll(if (dy > 0) -1 else 1)
+        }
     }
 }

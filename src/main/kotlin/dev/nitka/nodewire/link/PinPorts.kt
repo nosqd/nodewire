@@ -107,17 +107,26 @@ object PinPorts {
     }
 
     /**
-     * The fallback every plain block gets:
-     *  * output `redstone` — the block's best-neighbour signal, polled per
-     *    tick (a lever, comparator, pressure plate… becomes a source).
-     *  * input `redstone@<face>` — drive-by-wire onto that face. This input
-     *    has NO [PinPort.writePin] body: the bind packet routes it to the
-     *    source LogicBlock's [dev.nitka.nodewire.block.SideBinding] push
-     *    path (a stateless adapter can't emit into the signal map itself).
+     * The redstone fallback:
+     *  * output `redstone` — ONLY on blocks that actually emit redstone
+     *    ([net.minecraft.world.level.block.state.BlockState.isSignalSource]:
+     *    levers, buttons, comparators, redstone blocks, pressure plates,
+     *    observers, redstone wire…). Reads the block's strongest EMITTED signal
+     *    across all faces — not the incoming neighbour signal, which is 0 on a
+     *    source. Plain decoration blocks no longer offer a redstone source.
+     *  * input `redstone@<face>` — drive-by-wire onto that face, available on
+     *    EVERY block (you can power a lamp, door, any block). This input has NO
+     *    [PinPort.writePin] body: the bind packet routes it to the source
+     *    LogicBlock's [dev.nitka.nodewire.block.SideBinding] push path (a
+     *    stateless adapter can't emit into the signal map itself).
      */
     private class RedstonePort(private val level: Level, private val pos: BlockPos) : PinPort {
         override fun pinOutputs(ctx: LinkContext): List<LinkPin> =
-            listOf(LinkPin(REDSTONE_PIN, PinType.REDSTONE))
+            if (level.getBlockState(pos).isSignalSource()) {
+                listOf(LinkPin(REDSTONE_PIN, PinType.REDSTONE))
+            } else {
+                emptyList()
+            }
 
         override fun pinInputs(ctx: LinkContext): List<LinkPin> {
             val face = ctx.face ?: return emptyList()
@@ -132,7 +141,11 @@ object PinPorts {
 
         override fun readPin(id: String): PinReading? {
             if (id != REDSTONE_PIN) return null
-            return PinReading(PinValue.Redstone(level.getBestNeighborSignal(pos)))
+            val state = level.getBlockState(pos)
+            // The block's own emitted strength (max over faces). For a source
+            // getBestNeighborSignal would read its inputs (0), not its output.
+            val emitted = Direction.values().maxOf { state.getSignal(level, pos, it) }
+            return PinReading(PinValue.Redstone(emitted))
         }
     }
 

@@ -9,6 +9,7 @@ import java.io.File
 import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.ResultValue
 import kotlin.script.experimental.api.ResultWithDiagnostics
+import kotlin.script.experimental.api.ScriptDiagnostic
 import kotlin.script.experimental.api.asDiagnostics
 import kotlin.script.experimental.api.ScriptEvaluationConfiguration
 import kotlin.script.experimental.api.implicitReceivers
@@ -66,12 +67,12 @@ class ScriptBackend : ScriptCompiler {
         // factory closes over the compiled script so it never recompiles.
         val compiled = compile(source)
         val script = compiled.valueOrNull()
-            ?: return ScriptCompileResult.Failure(compiled.reports.map { it.message })
+            ?: return ScriptCompileResult.Failure(compiled.userDiagnostics())
 
         // Build the first instance eagerly (for the pin shape / status).
         val first = evalModule(script)
         val module = first.valueOrNull()
-            ?: return ScriptCompileResult.Failure(first.reports.map { it.message })
+            ?: return ScriptCompileResult.Failure(first.userDiagnostics())
 
         // Per-node factory: re-run the compiled body's top-level declarations
         // against a brand-new module so live behaviors + plain vars + per-node
@@ -87,7 +88,7 @@ class ScriptBackend : ScriptCompiler {
         val r = evalSourceRaw(source)
         return when (r) {
             is ResultWithDiagnostics.Success -> ScriptEvalResult.Value(r.value)
-            is ResultWithDiagnostics.Failure -> ScriptEvalResult.Failure(r.reports.map { it.message })
+            is ResultWithDiagnostics.Failure -> ScriptEvalResult.Failure(r.userDiagnostics())
         }
     }
 
@@ -241,3 +242,21 @@ class ScriptBackend : ScriptCompiler {
 
 /** Concrete [ScriptModule] used as the implicit receiver for the compiled body. */
 private class NwScriptInstance : ScriptModule()
+
+/**
+ * User-facing compile diagnostics: keep only the ERROR/FATAL reports — the
+ * actual cause of a failed compile — and render each as `Error (line:col):
+ * message`. The Kotlin CLI floods `reports` with environment chatter ("Using
+ * JDK home inferred from java.home…", "Loading modules: [java.se, …]", "Using
+ * JVM IR backend") at INFO / STRONG_WARNING severity, which used to bury the
+ * one line that matters. Falls back to every report's raw message if the
+ * severity filter leaves nothing, so a failure is never reported blank.
+ */
+private fun ResultWithDiagnostics<*>.userDiagnostics(): List<String> {
+    val errors = reports.filter { it.severity >= ScriptDiagnostic.Severity.ERROR }
+    return errors.ifEmpty { reports }.map { d ->
+        val sev = d.severity.name.lowercase().replaceFirstChar(Char::uppercase)
+        val loc = d.location?.let { " (${it.start.line}:${it.start.col})" } ?: ""
+        "$sev$loc: ${d.message}"
+    }
+}

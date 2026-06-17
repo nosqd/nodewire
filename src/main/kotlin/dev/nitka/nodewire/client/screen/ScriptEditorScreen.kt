@@ -11,6 +11,8 @@ import dev.nitka.nodewire.net.SetScriptSourcePacket
 import dev.nitka.nodewire.script.ScriptDiagnostics
 import dev.nitka.nodewire.ui.components.Button
 import dev.nitka.nodewire.ui.components.ButtonDefaults
+import dev.nitka.nodewire.ui.components.Dialog
+import dev.nitka.nodewire.ui.components.DialogContent
 import dev.nitka.nodewire.ui.components.Surface
 import dev.nitka.nodewire.ui.components.SurfaceStyle
 import dev.nitka.nodewire.ui.components.Text
@@ -25,8 +27,10 @@ import dev.nitka.nodewire.ui.layout.PaddingValues
 import dev.nitka.nodewire.ui.layout.Row
 import dev.nitka.nodewire.ui.modifier.layout.fillMaxSize
 import dev.nitka.nodewire.ui.modifier.layout.fillMaxWidth
+import dev.nitka.nodewire.ui.modifier.layout.height
 import dev.nitka.nodewire.ui.modifier.layout.padding
 import dev.nitka.nodewire.ui.modifier.layout.weight
+import dev.nitka.nodewire.ui.modifier.layout.width
 import dev.nitka.nodewire.ui.render.BorderStroke
 import dev.nitka.nodewire.ui.theme.NwTheme
 import dev.nitka.nodewire.ui.theme.NwThemeProvider
@@ -76,6 +80,10 @@ class ScriptEditorScreen(
     private companion object {
         /** Sanity cap for a loaded script file — scripts are a few KiB. */
         const val MAX_SCRIPT_FILE_BYTES = 512L * 1024
+
+        /** Fixed size of the read-only error modal (Popup clamps it on-screen). */
+        const val ERROR_DIALOG_W = 380
+        const val ERROR_DIALOG_H = 220
     }
 
     /** One native picker at a time — a second click while one is open is a no-op. */
@@ -195,6 +203,8 @@ class ScriptEditorScreen(
             var text by remember { mutableStateOf(src) }
             // Transient file-IO feedback: (message, isError) or null.
             var ioMsg by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+            // Read-only full-error overlay toggle.
+            var showErrors by remember { mutableStateOf(false) }
             val (statusToken, statusText) = diagnostics()
             Box(modifier = Modifier.fillMaxSize().padding(NwTheme.dimens.space8)) {
                 Surface(
@@ -226,6 +236,14 @@ class ScriptEditorScreen(
                                 )
                             }
                             Box(modifier = Modifier.weight(1f)) {}
+                            // Full compile error → read-only viewer. Only when
+                            // the last server compile actually failed.
+                            if (statusToken == ScriptDiagnostics.STATUS_ERROR) {
+                                Button(
+                                    onClick = { showErrors = true },
+                                    style = ButtonDefaults.ghost(),
+                                ) { Text("⚠ Errors") }
+                            }
                             Button(
                                 onClick = {
                                     browseAndLoad(
@@ -261,6 +279,52 @@ class ScriptEditorScreen(
                         StatusStrip(statusToken, statusText)
                     }
                 }
+
+                // Read-only error overlay — stacks on top of the editor Surface.
+                if (showErrors) {
+                    ErrorOverlay(statusText) { showErrors = false }
+                }
+            }
+        }
+    }
+
+    /**
+     * Modal, read-only view of the full compile diagnostics — a centered,
+     * scrim-backed [Dialog] (the framework's modal primitive: it dims the
+     * editor behind and dismisses on outside-click / its own Close button).
+     * The text is the server-stamped [ScriptDiagnostics] payload (already
+     * noise-filtered by the scripting host), shown in a scrollable, selectable
+     * read-only [TextArea] so long multi-line errors can be read and copied
+     * without touching the source.
+     */
+    @Composable
+    private fun ErrorOverlay(text: String, onClose: () -> Unit) {
+        Dialog(onDismissRequest = onClose) {
+            DialogContent(modifier = Modifier.width(ERROR_DIALOG_W).height(ERROR_DIALOG_H)) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(NwTheme.dimens.space6),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Center,
+                        horizontalArrangement = Arrangement.spacedBy(NwTheme.dimens.space4),
+                    ) {
+                        Text(
+                            "Compile errors",
+                            style = NwTheme.typography.subtitle.copy(color = NwTheme.colors.pinRedstone),
+                        )
+                        Box(modifier = Modifier.weight(1f)) {}
+                        Button(onClick = onClose, style = ButtonDefaults.ghost()) { Text("Close") }
+                    }
+                    TextArea(
+                        value = text.ifEmpty { "(no diagnostics)" },
+                        onValueChange = {},
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        readOnly = true,
+                        lineNumbers = false,
+                    )
+                }
             }
         }
     }
@@ -272,8 +336,13 @@ class ScriptEditorScreen(
                 "Compiling…" to NwTheme.colors.onSurfaceMuted
             ScriptDiagnostics.STATUS_OK ->
                 "✅ Compiled" to NwTheme.colors.onSurfaceMuted
-            ScriptDiagnostics.STATUS_ERROR ->
-                "❌ ${text.ifEmpty { "Compile error" }}" to NwTheme.colors.pinRedstone
+            ScriptDiagnostics.STATUS_ERROR -> {
+                // Keep the strip to one line — the "⚠ Errors" button reveals
+                // the full multi-line text in the read-only overlay.
+                val first = text.lineSequence().firstOrNull { it.isNotBlank() } ?: "Compile error"
+                val more = (text.count { it == '\n' }).let { if (it > 0) "  (+$it more)" else "" }
+                "❌ $first$more" to NwTheme.colors.pinRedstone
+            }
             else -> "" to NwTheme.colors.onSurfaceMuted
         }
         if (label.isEmpty()) return

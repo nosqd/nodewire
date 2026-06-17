@@ -77,6 +77,7 @@ fun TextArea(
     modifier: Modifier = Modifier,
     placeholder: String = "",
     enabled: Boolean = true,
+    readOnly: Boolean = false,
     highlight: ((String) -> List<HlSpan>)? = null,
     lineNumbers: Boolean = false,
 ) {
@@ -203,6 +204,7 @@ fun TextArea(
     }
 
     fun restore(s: Snap) {
+        if (readOnly) return
         text = s.text
         caret = s.caret.coerceIn(0, s.text.length)
         anchor = s.anchor?.coerceIn(0, s.text.length)
@@ -221,8 +223,11 @@ fun TextArea(
         restore(s)
     }
 
-    /** Commit text + caret; clears selection. Single source of simple edits. */
+    /** Commit text + caret; clears selection. Single source of simple edits.
+     *  Read-only mode blocks the mutation here (caret nav / selection / scroll /
+     *  copy all stay live — only the text can't change). */
     fun apply(newText: String, newCaret: Int) {
+        if (readOnly) return
         text = newText
         caret = newCaret.coerceIn(0, newText.length)
         anchor = null
@@ -318,6 +323,7 @@ fun TextArea(
 
     // ── block indent / dedent ────────────────────────────────────────────
     fun reindent(dedent: Boolean) {
+        if (readOnly) return
         snapshot()
         val firstLine = lineOf(if (hasSelection()) selMin() else caret)
         var lastLine = lineOf(if (hasSelection()) selMax() else caret)

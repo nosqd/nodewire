@@ -48,8 +48,22 @@ inline fun <reified T> scriptPinType(): ScriptType = when (T::class) {
  * compiled script once, reads [specsIn]/[specsOut]/[stateCells] for the pin
  * shape, then drives ticks: push inputs → invoke [tickBlock] → pull outputs.
  */
-/** A debug message a script emitted via [ScriptModule.log] / [ScriptModule.chat]. */
-data class ScriptMessage(val text: String, val kind: MessageKind)
+/** Default radius (blocks) a `chat()` reaches around the emitting block. */
+const val DEFAULT_CHAT_RANGE: Double = 16.0
+
+/**
+ * A debug message a script emitted via [ScriptModule.log] / [ScriptModule.chat].
+ *
+ * [sender] (CHAT only) prefixes the line as `<sender> text` when set. [range]
+ * (CHAT only) is the delivery radius in blocks from the emitting block's WORLD
+ * position; `range <= 0` broadcasts to every player on the server.
+ */
+data class ScriptMessage(
+    val text: String,
+    val kind: MessageKind,
+    val sender: String? = null,
+    val range: Double = DEFAULT_CHAT_RANGE,
+)
 
 /** Where a [ScriptMessage] goes. LOG = server console / mod log; CHAT = nearby players. */
 enum class MessageKind { LOG, CHAT }
@@ -517,11 +531,24 @@ abstract class ScriptModule {
     /** Debug: write [text] to the server console / mod log (host-dispatched). */
     fun log(text: String) = addMessage(text, MessageKind.LOG)
 
-    /** Debug: send [text] to nearby players' chat (host-dispatched, server-side). */
-    fun chat(text: String) = addMessage(text, MessageKind.CHAT)
+    /**
+     * Send [text] to players' chat (host-dispatched, server-side).
+     *
+     * @param sender optional name shown as `<sender> text`.
+     * @param range  delivery radius in blocks from this block's WORLD position
+     *               (default [DEFAULT_CHAT_RANGE]); pass `0.0` to reach every
+     *               player on the server.
+     */
+    fun chat(text: String, sender: String? = null, range: Double = DEFAULT_CHAT_RANGE) =
+        addMessage(text, MessageKind.CHAT, sender, range)
 
-    private fun addMessage(text: String, kind: MessageKind) {
-        if (messages.size < MAX_MESSAGES_PER_TICK) messages.add(ScriptMessage(text, kind))
+    private fun addMessage(
+        text: String,
+        kind: MessageKind,
+        sender: String? = null,
+        range: Double = DEFAULT_CHAT_RANGE,
+    ) {
+        if (messages.size < MAX_MESSAGES_PER_TICK) messages.add(ScriptMessage(text, kind, sender, range))
     }
 
     /** Host-side: take and clear the messages emitted since the last drain. */

@@ -1156,24 +1156,37 @@ class LogicBlockEntity(pos: BlockPos, state: BlockState) :
             DIRECTIONS_BY_NAME[name.lowercase()]
 
         private val SCRIPT_LOG: org.slf4j.Logger = com.mojang.logging.LogUtils.getLogger()
-        private const val SCRIPT_CHAT_RANGE = 16.0
 
-        /** Deliver a tick's script log()/chat() messages: LOG to console, CHAT to nearby players. */
+        /** Deliver a tick's script log()/chat() messages: LOG to console, CHAT to players.
+         *
+         * CHAT range is measured from the block's WORLD position — resolved via
+         * the endpoint backend so a Logic Block riding a Sable sub-level uses its
+         * real, posed location, not the raw plot coordinate (which never matches a
+         * player standing on the moving structure — the old "chat doesn't work on
+         * a ship" bug). A message [range][ScriptMessage.range] of 0 or less reaches
+         * every player on the server. */
         private fun dispatchScriptMessages(
             level: Level,
             pos: BlockPos,
             msgs: List<dev.nitka.nodewire.script.ScriptMessage>,
         ) {
             val server = level as? net.minecraft.server.level.ServerLevel
+            val worldCenter: net.minecraft.world.phys.Vec3 by lazy {
+                dev.nitka.nodewire.endpoint.EndpointRef.from(level, pos).worldCenter(level)
+                    ?: net.minecraft.world.phys.Vec3.atCenterOf(pos)
+            }
             for (m in msgs) {
                 when (m.kind) {
                     dev.nitka.nodewire.script.MessageKind.LOG ->
                         SCRIPT_LOG.info("[script @ {}] {}", pos, m.text)
                     dev.nitka.nodewire.script.MessageKind.CHAT -> {
-                        val comp = net.minecraft.network.chat.Component.literal(m.text)
-                        server?.players()
-                            ?.filter { pos.closerThan(it.blockPosition(), SCRIPT_CHAT_RANGE) }
-                            ?.forEach { it.sendSystemMessage(comp) }
+                        val players = server?.players() ?: continue
+                        val text = if (m.sender.isNullOrBlank()) m.text else "<${m.sender}> ${m.text}"
+                        val comp = net.minecraft.network.chat.Component.literal(text)
+                        val targets =
+                            if (m.range <= 0.0) players
+                            else players.filter { worldCenter.distanceToSqr(it.position()) <= m.range * m.range }
+                        targets.forEach { it.sendSystemMessage(comp) }
                     }
                 }
             }

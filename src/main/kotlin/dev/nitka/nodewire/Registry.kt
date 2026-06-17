@@ -6,6 +6,8 @@ import dev.nitka.nodewire.block.LogicBlock
 import dev.nitka.nodewire.block.LogicBlockEntity
 import dev.nitka.nodewire.block.ScreenBlock
 import dev.nitka.nodewire.block.ScreenBlockEntity
+import dev.nitka.nodewire.block.TelemetryBlock
+import dev.nitka.nodewire.block.TelemetryBlockEntity
 import dev.nitka.nodewire.item.ChannelLinkToolItem
 import net.minecraft.core.registries.Registries
 import net.minecraft.world.item.BlockItem
@@ -54,6 +56,13 @@ object Registry {
     val CAMERA_BLOCK_ITEM: DeferredItem<BlockItem> =
         ITEMS.registerSimpleBlockItem(CAMERA_BLOCK)
 
+    val TELEMETRY_BLOCK: DeferredBlock<TelemetryBlock> = BLOCKS.register("telemetry_block") { _ ->
+        TelemetryBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK))
+    }
+
+    val TELEMETRY_BLOCK_ITEM: DeferredItem<BlockItem> =
+        ITEMS.registerSimpleBlockItem(TELEMETRY_BLOCK)
+
     val LOGIC_BLOCK_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<LogicBlockEntity>> =
         BLOCK_ENTITIES.register("logic_block") { _ ->
             BlockEntityType.Builder
@@ -75,6 +84,13 @@ object Registry {
                 .build(null)
         }
 
+    val TELEMETRY_BLOCK_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<TelemetryBlockEntity>> =
+        BLOCK_ENTITIES.register("telemetry_block") { _ ->
+            BlockEntityType.Builder
+                .of(::TelemetryBlockEntity, TELEMETRY_BLOCK.get())
+                .build(null)
+        }
+
     fun register(bus: IEventBus) {
         BLOCKS.register(bus)
         ITEMS.register(bus)
@@ -90,6 +106,7 @@ object Registry {
             event.accept(LOGIC_BLOCK_ITEM.get())
             event.accept(SCREEN_BLOCK_ITEM.get())
             event.accept(CAMERA_BLOCK_ITEM.get())
+            event.accept(TELEMETRY_BLOCK_ITEM.get())
         }
         if (event.tabKey == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(CHANNEL_LINK_TOOL.get())

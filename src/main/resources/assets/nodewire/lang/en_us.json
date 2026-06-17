@@ -1,6 +1,8 @@
 {
   "block.nodewire.logic_block": "Logic Block",
   "block.nodewire.screen_block": "Screen Block",
+  "block.nodewire.camera_block": "Camera Block",
+  "block.nodewire.telemetry_block": "Telemetry Block",
   "item.nodewire.channel_link_tool": "Channel Link Tool",
 
   "key.categories.nodewire": "Nodewire",

@@ -2,7 +2,9 @@ package dev.nitka.nodewire.client
 
 import com.mojang.blaze3d.platform.InputConstants
 import com.mojang.logging.LogUtils
+import dev.nitka.nodewire.client.camera.CameraBlockRenderer
 import dev.nitka.nodewire.client.command.HighlightCommand
+import dev.nitka.nodewire.client.control.ControlSession
 import dev.nitka.nodewire.client.highlight.BlockHighlightRenderer
 import dev.nitka.nodewire.client.link.LinkHud
 import dev.nitka.nodewire.client.link.LinkHudRenderer
@@ -45,14 +47,37 @@ object NodewireClient {
         "key.categories.nodewire",
     )
 
+    /** Control Block: toggle mouse aiming during a piloting session (rebindable). */
+    private val CONTROL_MOUSE_KEY = KeyMapping(
+        "key.nodewire.control_mouse",
+        KeyConflictContext.IN_GAME,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_V,
+        "key.categories.nodewire",
+    )
+
     fun registerOnModBus(bus: IEventBus) {
-        bus.addListener<RegisterKeyMappingsEvent> { it.register(OPEN_DEMO_KEY) }
+        bus.addListener<RegisterKeyMappingsEvent> {
+            it.register(OPEN_DEMO_KEY)
+            it.register(CONTROL_MOUSE_KEY)
+        }
         // First BER in the repo: the video Screen face. MOD bus.
         bus.addListener<net.neoforged.neoforge.client.event.EntityRenderersEvent.RegisterRenderers> { event ->
             event.registerBlockEntityRenderer(
                 dev.nitka.nodewire.Registry.SCREEN_BLOCK_BE.get(),
                 ::ScreenBlockRenderer,
             )
+            // Rotatable camera gimbal (yoke + head moving parts).
+            event.registerBlockEntityRenderer(
+                dev.nitka.nodewire.Registry.CAMERA_BLOCK_BE.get(),
+                ::CameraBlockRenderer,
+            )
+        }
+        // Bake the camera's two moving sub-models as standalone models so the
+        // BER (and the future Flywheel visual) can fetch them.
+        bus.addListener<net.neoforged.neoforge.client.event.ModelEvent.RegisterAdditional> { event ->
+            event.register(CameraBlockRenderer.YAW_MODEL)
+            event.register(CameraBlockRenderer.HEAD_MODEL)
         }
         FORGE_BUS.addListener(::onClientTick)
         FORGE_BUS.addListener<RenderLevelStageEvent>(WireWorldRenderer::render)
@@ -66,6 +91,12 @@ object NodewireClient {
         FORGE_BUS.addListener(::onMouseScroll)
         // Channel Link Tool inline pin window — hover state + HUD draw.
         FORGE_BUS.addListener<net.neoforged.neoforge.client.event.RenderGuiEvent.Post>(LinkHudRenderer::onRenderGui)
+        // Control Block piloting: suppress vanilla movement/interaction + HUD.
+        FORGE_BUS.addListener(::onMovementInput)
+        FORGE_BUS.addListener(::onInteractionKey)
+        FORGE_BUS.addListener<net.neoforged.neoforge.client.event.RenderGuiEvent.Post>(
+            dev.nitka.nodewire.client.control.ControlHud::onRenderGui,
+        )
         LOG.info("Nodewire client handlers registered (MOD bus + FORGE bus)")
     }
 
@@ -76,6 +107,12 @@ object NodewireClient {
         // Refresh the Link Tool hover window from the crosshair (no-ops / clears
         // itself when the tool isn't held or a screen is open).
         LinkHud.update()
+        // Stream the pilot's input while a Control Block session is active.
+        ControlSession.update()
+        // Drain the mouse-capture keybind; toggle only while piloting.
+        var toggled = false
+        while (CONTROL_MOUSE_KEY.consumeClick()) toggled = true
+        if (toggled && ControlSession.isActive()) ControlSession.toggleMouse()
         if (Minecraft.getInstance().screen != null) return
         if (OPEN_DEMO_KEY.consumeClick()) {
             LOG.info("Opening DemoScreen")
@@ -104,6 +141,16 @@ object NodewireClient {
      */
     private fun onMouseScroll(event: net.neoforged.neoforge.client.event.InputEvent.MouseScrollingEvent) {
         val player = Minecraft.getInstance().player ?: return
+        // Piloting + mouse captured → the wheel feeds the Control Block's SCROLL
+        // bindings instead of switching the hotbar.
+        if (ControlSession.isActive() && ControlSession.mouseCaptured) {
+            val dy = event.scrollDeltaY
+            if (dy != 0.0) {
+                ControlSession.addScroll(dy)
+                event.isCanceled = true
+            }
+            return
+        }
         if (player.mainHandItem.item !is dev.nitka.nodewire.item.ChannelLinkToolItem) return
         val dy = event.scrollDeltaY
         if (dy == 0.0) return
@@ -118,5 +165,33 @@ object NodewireClient {
             event.isCanceled = true
             LinkHud.scroll(if (dy > 0) -1 else 1)
         }
+    }
+
+    /**
+     * While piloting a Control Block, zero the player's movement input so WASD /
+     * jump / sneak drive only the block's pins (read raw) and don't walk the
+     * player out of the seat. Mouse-look is untouched so look-to-aim still works.
+     */
+    private fun onMovementInput(event: net.neoforged.neoforge.client.event.MovementInputUpdateEvent) {
+        if (!ControlSession.isActive()) return
+        val i = event.input
+        i.forwardImpulse = 0f
+        i.leftImpulse = 0f
+        i.up = false
+        i.down = false
+        i.left = false
+        i.right = false
+        i.jumping = false
+        i.shiftKeyDown = false
+    }
+
+    /** While piloting, cancel attack / use / pick so LMB/RMB feed the pins
+     *  instead of breaking, placing or picking blocks. */
+    private fun onInteractionKey(
+        event: net.neoforged.neoforge.client.event.InputEvent.InteractionKeyMappingTriggered,
+    ) {
+        if (!ControlSession.isActive()) return
+        event.isCanceled = true
+        event.setSwingHand(false)
     }
 }

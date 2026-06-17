@@ -1,0 +1,9 @@
+{
+  "comment": "Static base only — the camera_yaw yoke + camera_head are drawn by CameraBlockRenderer (BER) / the Flywheel visual so they can rotate.",
+  "variants": {
+    "facing=north": { "model": "nodewire:block/camera_body" },
+    "facing=south": { "model": "nodewire:block/camera_body", "y": 180 },
+    "facing=west": { "model": "nodewire:block/camera_body", "y": 270 },
+    "facing=east": { "model": "nodewire:block/camera_body", "y": 90 }
+  }
+}

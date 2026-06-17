@@ -4,6 +4,8 @@ import dev.nitka.nodewire.block.CameraBlock
 import dev.nitka.nodewire.block.CameraBlockEntity
 import dev.nitka.nodewire.block.LogicBlock
 import dev.nitka.nodewire.block.LogicBlockEntity
+import dev.nitka.nodewire.block.ControlBlock
+import dev.nitka.nodewire.block.ControlBlockEntity
 import dev.nitka.nodewire.block.ScreenBlock
 import dev.nitka.nodewire.block.ScreenBlockEntity
 import dev.nitka.nodewire.block.TelemetryBlock
@@ -50,11 +52,22 @@ object Registry {
         ITEMS.registerSimpleBlockItem(SCREEN_BLOCK)
 
     val CAMERA_BLOCK: DeferredBlock<CameraBlock> = BLOCKS.register("camera_block") { _ ->
-        CameraBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK))
+        // noOcclusion: the camera isn't a full opaque cube (only a 4-tall base +
+        // a BER-rendered gimbal in the airspace above). Without it the block's
+        // own cell light is 0 and the moving parts render pitch black.
+        CameraBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).noOcclusion())
     }
 
     val CAMERA_BLOCK_ITEM: DeferredItem<BlockItem> =
         ITEMS.registerSimpleBlockItem(CAMERA_BLOCK)
+
+    /** Fixed Camera — aims along its facing only (no gimbal / rotation pins). */
+    val STATIC_CAMERA_BLOCK: DeferredBlock<CameraBlock> = BLOCKS.register("static_camera_block") { _ ->
+        CameraBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).noOcclusion(), rotatable = false)
+    }
+
+    val STATIC_CAMERA_BLOCK_ITEM: DeferredItem<BlockItem> =
+        ITEMS.registerSimpleBlockItem(STATIC_CAMERA_BLOCK)
 
     val TELEMETRY_BLOCK: DeferredBlock<TelemetryBlock> = BLOCKS.register("telemetry_block") { _ ->
         TelemetryBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK))
@@ -62,6 +75,13 @@ object Registry {
 
     val TELEMETRY_BLOCK_ITEM: DeferredItem<BlockItem> =
         ITEMS.registerSimpleBlockItem(TELEMETRY_BLOCK)
+
+    val CONTROL_BLOCK: DeferredBlock<ControlBlock> = BLOCKS.register("control_block") { _ ->
+        ControlBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK))
+    }
+
+    val CONTROL_BLOCK_ITEM: DeferredItem<BlockItem> =
+        ITEMS.registerSimpleBlockItem(CONTROL_BLOCK)
 
     val LOGIC_BLOCK_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<LogicBlockEntity>> =
         BLOCK_ENTITIES.register("logic_block") { _ ->
@@ -80,7 +100,7 @@ object Registry {
     val CAMERA_BLOCK_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<CameraBlockEntity>> =
         BLOCK_ENTITIES.register("camera_block") { _ ->
             BlockEntityType.Builder
-                .of(::CameraBlockEntity, CAMERA_BLOCK.get())
+                .of(::CameraBlockEntity, CAMERA_BLOCK.get(), STATIC_CAMERA_BLOCK.get())
                 .build(null)
         }
 
@@ -88,6 +108,13 @@ object Registry {
         BLOCK_ENTITIES.register("telemetry_block") { _ ->
             BlockEntityType.Builder
                 .of(::TelemetryBlockEntity, TELEMETRY_BLOCK.get())
+                .build(null)
+        }
+
+    val CONTROL_BLOCK_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<ControlBlockEntity>> =
+        BLOCK_ENTITIES.register("control_block") { _ ->
+            BlockEntityType.Builder
+                .of(::ControlBlockEntity, CONTROL_BLOCK.get())
                 .build(null)
         }
 
@@ -106,7 +133,9 @@ object Registry {
             event.accept(LOGIC_BLOCK_ITEM.get())
             event.accept(SCREEN_BLOCK_ITEM.get())
             event.accept(CAMERA_BLOCK_ITEM.get())
+            event.accept(STATIC_CAMERA_BLOCK_ITEM.get())
             event.accept(TELEMETRY_BLOCK_ITEM.get())
+            event.accept(CONTROL_BLOCK_ITEM.get())
         }
         if (event.tabKey == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(CHANNEL_LINK_TOOL.get())

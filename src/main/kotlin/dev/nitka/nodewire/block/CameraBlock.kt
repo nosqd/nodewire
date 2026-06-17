@@ -21,7 +21,13 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty
  * looks out of that face. No server ticker and no BER — the producer owns no
  * graph and needs no custom face render.
  */
-class CameraBlock(props: Properties) : Block(props), EntityBlock {
+/**
+ * [rotatable] = true → the gimbal Camera: exposes yaw/pitch/roll input pins and
+ * its yoke/head are drawn by [dev.nitka.nodewire.client.camera.CameraBlockRenderer].
+ * false → the Fixed Camera: aims along its facing only (no rotation pins, one
+ * static model). Both share [CameraBlockEntity] and its BE type.
+ */
+class CameraBlock(props: Properties, val rotatable: Boolean = true) : Block(props), EntityBlock {
 
     init {
         registerDefaultState(stateDefinition.any().setValue(FACING, net.minecraft.core.Direction.NORTH))

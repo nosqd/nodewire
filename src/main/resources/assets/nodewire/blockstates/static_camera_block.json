@@ -1,0 +1,9 @@
+{
+  "comment": "Fixed Camera — one static model (the whole gimbal frozen at rest); no BER moving parts.",
+  "variants": {
+    "facing=north": { "model": "nodewire:block/camera_full" },
+    "facing=south": { "model": "nodewire:block/camera_full", "y": 180 },
+    "facing=west": { "model": "nodewire:block/camera_full", "y": 270 },
+    "facing=east": { "model": "nodewire:block/camera_full", "y": 90 }
+  }
+}

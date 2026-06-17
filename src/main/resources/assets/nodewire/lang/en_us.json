@@ -2,9 +2,12 @@
   "block.nodewire.logic_block": "Logic Block",
   "block.nodewire.screen_block": "Screen Block",
   "block.nodewire.camera_block": "Camera Block",
+  "block.nodewire.static_camera_block": "Fixed Camera",
   "block.nodewire.telemetry_block": "Telemetry Block",
+  "block.nodewire.control_block": "Control Block",
   "item.nodewire.channel_link_tool": "Channel Link Tool",
 
   "key.categories.nodewire": "Nodewire",
-  "key.nodewire.open_demo": "Open UI demo (dev)"
+  "key.nodewire.open_demo": "Open UI demo (dev)",
+  "key.nodewire.control_mouse": "Control Block: toggle mouse capture"
 }

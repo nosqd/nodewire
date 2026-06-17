@@ -62,13 +62,19 @@ class CameraBlockEntity(pos: BlockPos, state: BlockState) :
     override fun pinOutputs(ctx: dev.nitka.nodewire.link.LinkContext): List<dev.nitka.nodewire.link.LinkPin> =
         listOf(dev.nitka.nodewire.link.LinkPin(VIDEO_PIN, PinType.VIDEO))
 
+    /** True for the gimbal Camera, false for the Fixed Camera (no rotation pins). */
+    fun isRotatable(): Boolean = (blockState.block as? CameraBlock)?.rotatable ?: true
+
     override fun pinInputs(ctx: dev.nitka.nodewire.link.LinkContext): List<dev.nitka.nodewire.link.LinkPin> =
-        listOf(
-            dev.nitka.nodewire.link.LinkPin(FOV_CHANNEL, PinType.FLOAT),
-            dev.nitka.nodewire.link.LinkPin(ENABLE_CHANNEL, PinType.BOOL),
-            dev.nitka.nodewire.link.LinkPin(YAW_CHANNEL, PinType.FLOAT),
-            dev.nitka.nodewire.link.LinkPin(PITCH_CHANNEL, PinType.FLOAT),
-        )
+        buildList {
+            add(dev.nitka.nodewire.link.LinkPin(FOV_CHANNEL, PinType.FLOAT))
+            add(dev.nitka.nodewire.link.LinkPin(ENABLE_CHANNEL, PinType.BOOL))
+            if (isRotatable()) {
+                add(dev.nitka.nodewire.link.LinkPin(YAW_CHANNEL, PinType.FLOAT))
+                add(dev.nitka.nodewire.link.LinkPin(PITCH_CHANNEL, PinType.FLOAT))
+                add(dev.nitka.nodewire.link.LinkPin(ROLL_CHANNEL, PinType.FLOAT))
+            }
+        }
 
     override fun readPin(id: String): dev.nitka.nodewire.link.PinReading? =
         if (id == VIDEO_PIN) dev.nitka.nodewire.link.PinReading(videoValue()) else null
@@ -132,6 +138,9 @@ class CameraBlockEntity(pos: BlockPos, state: BlockState) :
     /** Pitch offset in degrees. Default 0. */
     fun pitchDeg(): Float = (channelInputs[PITCH_CHANNEL] as? PinValue.Float)?.value ?: 0f
 
+    /** Roll offset in degrees (turret gimbal head). Default 0. */
+    fun rollDeg(): Float = (channelInputs[ROLL_CHANNEL] as? PinValue.Float)?.value ?: 0f
+
     /**
      * [ChannelInputSink] entry point — cross-block delivery of a camera param.
      * On the server, push a BE update so the client learns the new value; on
@@ -169,6 +178,7 @@ class CameraBlockEntity(pos: BlockPos, state: BlockState) :
         readParam(tag, FOV_CHANNEL, numeric = true)
         readParam(tag, YAW_CHANNEL, numeric = true)
         readParam(tag, PITCH_CHANNEL, numeric = true)
+        readParam(tag, ROLL_CHANNEL, numeric = true)
         if (tag.contains(ENABLE_CHANNEL)) channelInputs[ENABLE_CHANNEL] = PinValue.Bool(tag.getBoolean(ENABLE_CHANNEL))
         pinLinks.clear()
         if (tag.contains(TAG_PIN_LINKS)) {
@@ -244,6 +254,7 @@ class CameraBlockEntity(pos: BlockPos, state: BlockState) :
         const val ENABLE_CHANNEL = "enable"
         const val YAW_CHANNEL = "yaw"
         const val PITCH_CHANNEL = "pitch"
+        const val ROLL_CHANNEL = "roll"
 
         private const val TAG_PIN_LINKS = "pin_links"
     }

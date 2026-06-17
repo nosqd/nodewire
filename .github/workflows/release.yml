@@ -74,6 +74,7 @@ jobs:
           body_path: deps-table.md
           files: |
             build/libs/*.jar
+            scripting/build/libs/*.jar
 
       # Mirror the release to Modrinth. Uses the same deps-table.md as
       # the GitHub body so the version's changelog on Modrinth carries
@@ -91,7 +92,9 @@ jobs:
           version: ${{ steps.ver.outputs.mod_version }}
           version-type: ${{ steps.prerel.outputs.prerelease == 'true' && 'beta' || 'release' }}
           changelog-file: deps-table.md
-          files: build/libs/!(*-sources|*-dev|*-javadoc).jar
+          files: |
+            build/libs/!(*-sources|*-dev|*-javadoc).jar
+            scripting/build/libs/!(*-sources|*-dev|*-javadoc).jar
           loaders: neoforge
           game-versions: 1.21.1
           # Format: slug(scope){platform:id?}. Slugs match Modrinth

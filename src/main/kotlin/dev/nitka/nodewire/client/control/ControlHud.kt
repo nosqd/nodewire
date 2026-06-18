@@ -10,6 +10,12 @@ object ControlHud {
     private const val TEXT = 0xFF_E8_E8_EC.toInt()
     private const val ACCENT = 0xFF_00_FF_66.toInt()
 
+    /** Live display name of the exit keybind (set by NodewireClient each tick). */
+    @JvmField var exitKeyName: String = "?"
+
+    /** Live display name of the mouse-capture keybind. */
+    @JvmField var mouseKeyName: String = "?"
+
     fun onRenderGui(event: RenderGuiEvent.Post) {
         if (!ControlSession.isActive()) return
         val mc = Minecraft.getInstance()
@@ -18,7 +24,7 @@ object ControlHud {
         val g = event.guiGraphics
         val font = mc.font
         val captured = ControlSession.mouseCaptured
-        val text = "● Piloting  ·  RMB block to exit  ·  V: mouse ${if (captured) "ON" else "OFF"}"
+        val text = "● Controlling  ·  $exitKeyName: exit  ·  $mouseKeyName: mouse ${if (captured) "ON" else "OFF"}"
         val w = font.width(text)
         val x = (mc.window.guiScaledWidth - w) / 2
         val y = mc.window.guiScaledHeight - 56

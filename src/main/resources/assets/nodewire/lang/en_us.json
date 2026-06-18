@@ -5,9 +5,14 @@
   "block.nodewire.static_camera_block": "Fixed Camera",
   "block.nodewire.telemetry_block": "Telemetry Block",
   "block.nodewire.control_block": "Control Block",
+  "block.nodewire.radio_transmitter": "Radio Transmitter",
+  "block.nodewire.radio_receiver": "Radio Receiver",
   "item.nodewire.channel_link_tool": "Channel Link Tool",
+  "item.nodewire.antenna_basic": "Basic Antenna",
+  "item.nodewire.antenna_long": "Long-Range Antenna",
 
   "key.categories.nodewire": "Nodewire",
   "key.nodewire.open_demo": "Open UI demo (dev)",
-  "key.nodewire.control_mouse": "Control Block: toggle mouse capture"
+  "key.nodewire.control_mouse": "Control Block: toggle mouse capture",
+  "key.nodewire.control_exit": "Control Block: exit session"
 }

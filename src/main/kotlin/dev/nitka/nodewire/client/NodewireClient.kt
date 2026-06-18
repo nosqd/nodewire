@@ -56,10 +56,21 @@ object NodewireClient {
         "key.categories.nodewire",
     )
 
+    /** Control Block: leave the piloting session. A dedicated key because RMB
+     *  (the would-be exit) is among the interactions suppressed while piloting. */
+    private val CONTROL_EXIT_KEY = KeyMapping(
+        "key.nodewire.control_exit",
+        KeyConflictContext.IN_GAME,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_G,
+        "key.categories.nodewire",
+    )
+
     fun registerOnModBus(bus: IEventBus) {
         bus.addListener<RegisterKeyMappingsEvent> {
             it.register(OPEN_DEMO_KEY)
             it.register(CONTROL_MOUSE_KEY)
+            it.register(CONTROL_EXIT_KEY)
         }
         // First BER in the repo: the video Screen face. MOD bus.
         bus.addListener<net.neoforged.neoforge.client.event.EntityRenderersEvent.RegisterRenderers> { event ->
@@ -113,6 +124,23 @@ object NodewireClient {
         var toggled = false
         while (CONTROL_MOUSE_KEY.consumeClick()) toggled = true
         if (toggled && ControlSession.isActive()) ControlSession.toggleMouse()
+        // Dedicated exit key (RMB can't exit — it's suppressed while piloting).
+        var exitPressed = false
+        while (CONTROL_EXIT_KEY.consumeClick()) exitPressed = true
+        if (exitPressed && ControlSession.isActive()) {
+            ControlSession.exit()
+            Minecraft.getInstance().player?.displayClientMessage(
+                net.minecraft.network.chat.Component.literal("Exited control")
+                    .withStyle(net.minecraft.ChatFormatting.AQUA),
+                true,
+            )
+        }
+        // Keep the HUD's key hints in sync with the (rebindable) keybinds —
+        // English labels (KeyNames) regardless of the game language.
+        dev.nitka.nodewire.client.control.ControlHud.exitKeyName =
+            dev.nitka.nodewire.block.control.KeyNames.label(CONTROL_EXIT_KEY.key.value)
+        dev.nitka.nodewire.client.control.ControlHud.mouseKeyName =
+            dev.nitka.nodewire.block.control.KeyNames.label(CONTROL_MOUSE_KEY.key.value)
         if (Minecraft.getInstance().screen != null) return
         if (OPEN_DEMO_KEY.consumeClick()) {
             LOG.info("Opening DemoScreen")

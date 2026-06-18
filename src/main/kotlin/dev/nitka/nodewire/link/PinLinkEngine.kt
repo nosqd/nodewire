@@ -1,11 +1,13 @@
 package dev.nitka.nodewire.link
 
+import dev.nitka.nodewire.endpoint.EndpointRef
 import dev.nitka.nodewire.graph.PinType
 import dev.nitka.nodewire.graph.PinValue
 import dev.nitka.nodewire.graph.PinValueConversion
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntity
+import net.minecraft.world.phys.Vec3
 
 /**
  * The single delivery loop behind every [PinLink]. Called from each sink's
@@ -30,6 +32,12 @@ object PinLinkEngine {
      *  Cheap (no allocation on quiet sinks); grep `NW-LINK`. */
     private const val DIAG_PERIOD_TICKS = 100L
 
+    /** Max world distance (blocks) between a link's source and sink. Beyond it
+     *  the pin goes quiet — wired channels are short-range on purpose; long-haul
+     *  data is the job of the (planned) radio channel system. */
+    const val MAX_LINK_DISTANCE = 64.0
+    private const val MAX_LINK_DISTANCE_SQ = MAX_LINK_DISTANCE * MAX_LINK_DISTANCE
+
     /** Per-server-tick pull for one sink BE. No-ops unless [be] is a [PinLinkSink]. */
     fun tick(level: Level, be: BlockEntity) {
         val sink = be as? PinLinkSink ?: return
@@ -40,6 +48,8 @@ object PinLinkEngine {
 
         val ctx = LinkContext(level, be.blockPos, be.blockState)
         val inputsById = sink.pinInputs(ctx).associateBy { it.id }
+        // Sub-level-aware world centre of this sink, for the range gate.
+        val sinkCenter = centerOf(level, EndpointRef.from(level, be.blockPos))
 
         val delivered = HashSet<String>()
         var changed = false
@@ -65,6 +75,19 @@ object PinLinkEngine {
                         "NW-LINK @{}: '{}'<-'{}' source {} UNRESOLVED (backend={}, loaded={})",
                         be.blockPos.toShortString(), link.targetPin, link.sourcePin,
                         pos.toShortString(), link.source.backendId, level.isLoaded(pos),
+                    )
+                }
+                continue
+            }
+            // Range gate: too far apart → go quiet (don't deliver, don't prune;
+            // structures move, so the link may come back into range).
+            val srcCenter = centerOf(level, link.source)
+            if (srcCenter.distanceToSqr(sinkCenter) > MAX_LINK_DISTANCE_SQ) {
+                if (diag) {
+                    LOG.info(
+                        "NW-LINK @{}: '{}'<-'{}' OUT OF RANGE ({}m > {}m)",
+                        be.blockPos.toShortString(), link.targetPin, link.sourcePin,
+                        "%.1f".format(Math.sqrt(srcCenter.distanceToSqr(sinkCenter))), MAX_LINK_DISTANCE,
                     )
                 }
                 continue
@@ -131,6 +154,7 @@ object PinLinkEngine {
         val ctx = LinkContext(level, be.blockPos, be.blockState)
         val tgtPin = sink.pinInputs(ctx).firstOrNull { it.id == link.targetPin } ?: return false
         if (!PinValueConversion.canConvert(srcType, tgtPin.type)) return false
+        if (!sink.acceptsSource(link.targetPin, srcType)) return false
         sink.pinLinks().removeAll {
             it.targetPin == link.targetPin &&
                 it.source.payload.blockPos == link.source.payload.blockPos
@@ -150,6 +174,10 @@ object PinLinkEngine {
         if (removed) sink.onPinLinksChanged()
         return removed
     }
+
+    /** Sub-level-aware world centre of an endpoint, or its block centre. */
+    private fun centerOf(level: Level, ref: EndpointRef): Vec3 =
+        ref.worldCenter(level) ?: Vec3.atCenterOf(ref.payload.blockPos)
 
     private fun quiescent(firedValue: PinValue, declared: PinType): PinValue =
         when (firedValue) {

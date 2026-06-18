@@ -86,6 +86,11 @@ data class BindPinPacket(
             if (packet.source.payload.blockPos == packet.target.payload.blockPos) {
                 notify(player, "Source and target must differ"); return
             }
+            val maxSq = PinLinkEngine.MAX_LINK_DISTANCE * PinLinkEngine.MAX_LINK_DISTANCE
+            if (srcCenter.distanceToSqr(tgtCenter) > maxSq) {
+                notify(player, "Too far for a wired link (max ${PinLinkEngine.MAX_LINK_DISTANCE.toInt()}m) — radio channels coming")
+                return
+            }
 
             val srcPort = PinPorts.portFor(level, packet.source)
             if (srcPort == null) {

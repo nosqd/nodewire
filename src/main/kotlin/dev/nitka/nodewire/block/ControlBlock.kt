@@ -51,9 +51,10 @@ class ControlBlock(props: Properties) : Block(props), EntityBlock {
             } else {
                 dev.nitka.nodewire.client.control.ControlSession.toggle(pos)
                 val on = dev.nitka.nodewire.client.control.ControlSession.isActive()
+                val exitKey = dev.nitka.nodewire.client.control.ControlHud.exitKeyName
                 player.displayClientMessage(
                     net.minecraft.network.chat.Component
-                        .literal(if (on) "Piloting — right-click to exit" else "Exited control")
+                        .literal(if (on) "Controlling — press $exitKey to exit" else "Exited control")
                         .withStyle(net.minecraft.ChatFormatting.AQUA),
                     true,
                 )

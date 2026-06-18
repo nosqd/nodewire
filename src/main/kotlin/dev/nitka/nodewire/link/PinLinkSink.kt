@@ -19,6 +19,14 @@ interface PinLinkSink : PinPort {
      *  engine tick actually delivered into — diffed to [PinPort.clearPin]
      *  pins that went silent. */
     val pinLinkScratch: PinLinkScratch
+
+    /**
+     * Bind-time veto beyond plain type compatibility: may [targetPin] accept a
+     * source of [srcType]? Default true. The Radio Transmitter uses it to keep
+     * VIDEO out of its ANY data-bus pins (ANY accepts anything by default), so
+     * video can only land on its dedicated VIDEO pin.
+     */
+    fun acceptsSource(targetPin: String, srcType: dev.nitka.nodewire.graph.PinType): Boolean = true
 }
 
 /** Transient per-sink engine state. */

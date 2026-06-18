@@ -11,11 +11,12 @@ import dev.nitka.nodewire.graph.PinType
  *  * [AXIS]       — 2 keys (negative, positive) → FLOAT in {-1, 0, +1}.
  *  * [VECTOR]     — 4 keys (forward, back, left, right) → VEC2 (x = right−left,
  *                  y = forward−back).
- *  * [MOUSE_LOOK] — the captured mouse → VEC2 (yaw, pitch / deltas; Phase 4).
- *  * [SCROLL]     — the wheel → FLOAT (Phase 4).
+ *  * [MOUSE_LOOK]  — captured mouse → VEC2 absolute aim (yaw, pitch degrees).
+ *  * [MOUSE_DELTA] — captured mouse → VEC2 movement since the last tick.
+ *  * [SCROLL]      — the wheel → FLOAT.
  */
 enum class BindKind {
-    BUTTON, AXIS, VECTOR, MOUSE_LOOK, SCROLL;
+    BUTTON, AXIS, VECTOR, MOUSE_LOOK, MOUSE_DELTA, SCROLL;
 
     /** The pin type this kind produces. */
     val pinType: PinType
@@ -24,6 +25,7 @@ enum class BindKind {
             AXIS -> PinType.FLOAT
             VECTOR -> PinType.VEC2
             MOUSE_LOOK -> PinType.VEC2
+            MOUSE_DELTA -> PinType.VEC2
             SCROLL -> PinType.FLOAT
         }
 
@@ -33,7 +35,7 @@ enum class BindKind {
             BUTTON -> 1
             AXIS -> 2
             VECTOR -> 4
-            MOUSE_LOOK, SCROLL -> 0
+            MOUSE_LOOK, MOUSE_DELTA, SCROLL -> 0
         }
 
     companion object {

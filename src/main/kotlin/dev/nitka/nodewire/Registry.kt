@@ -11,6 +11,11 @@ import dev.nitka.nodewire.block.ScreenBlockEntity
 import dev.nitka.nodewire.block.TelemetryBlock
 import dev.nitka.nodewire.block.TelemetryBlockEntity
 import dev.nitka.nodewire.item.ChannelLinkToolItem
+import dev.nitka.nodewire.radio.RadioAntennaItem
+import dev.nitka.nodewire.radio.RadioReceiverBlock
+import dev.nitka.nodewire.radio.RadioReceiverBlockEntity
+import dev.nitka.nodewire.radio.RadioTransmitterBlock
+import dev.nitka.nodewire.radio.RadioTransmitterBlockEntity
 import net.minecraft.core.registries.Registries
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.CreativeModeTabs
@@ -83,6 +88,30 @@ object Registry {
     val CONTROL_BLOCK_ITEM: DeferredItem<BlockItem> =
         ITEMS.registerSimpleBlockItem(CONTROL_BLOCK)
 
+    val RADIO_TRANSMITTER_BLOCK: DeferredBlock<RadioTransmitterBlock> = BLOCKS.register("radio_transmitter") { _ ->
+        RadioTransmitterBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK))
+    }
+
+    val RADIO_TRANSMITTER_BLOCK_ITEM: DeferredItem<BlockItem> =
+        ITEMS.registerSimpleBlockItem(RADIO_TRANSMITTER_BLOCK)
+
+    val RADIO_RECEIVER_BLOCK: DeferredBlock<RadioReceiverBlock> = BLOCKS.register("radio_receiver") { _ ->
+        RadioReceiverBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK))
+    }
+
+    val RADIO_RECEIVER_BLOCK_ITEM: DeferredItem<BlockItem> =
+        ITEMS.registerSimpleBlockItem(RADIO_RECEIVER_BLOCK)
+
+    /** Basic antenna — medium omnidirectional range. */
+    val ANTENNA_BASIC: DeferredItem<RadioAntennaItem> = ITEMS.register("antenna_basic") { _ ->
+        RadioAntennaItem(Item.Properties().stacksTo(1), range = 128.0, gain = 1.0)
+    }
+
+    /** Long-range antenna — wider reach + higher gain (wins the "strongest" contest). */
+    val ANTENNA_LONG: DeferredItem<RadioAntennaItem> = ITEMS.register("antenna_long") { _ ->
+        RadioAntennaItem(Item.Properties().stacksTo(1), range = 512.0, gain = 4.0)
+    }
+
     val LOGIC_BLOCK_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<LogicBlockEntity>> =
         BLOCK_ENTITIES.register("logic_block") { _ ->
             BlockEntityType.Builder
@@ -118,6 +147,20 @@ object Registry {
                 .build(null)
         }
 
+    val RADIO_TRANSMITTER_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<RadioTransmitterBlockEntity>> =
+        BLOCK_ENTITIES.register("radio_transmitter") { _ ->
+            BlockEntityType.Builder
+                .of(::RadioTransmitterBlockEntity, RADIO_TRANSMITTER_BLOCK.get())
+                .build(null)
+        }
+
+    val RADIO_RECEIVER_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<RadioReceiverBlockEntity>> =
+        BLOCK_ENTITIES.register("radio_receiver") { _ ->
+            BlockEntityType.Builder
+                .of(::RadioReceiverBlockEntity, RADIO_RECEIVER_BLOCK.get())
+                .build(null)
+        }
+
     fun register(bus: IEventBus) {
         BLOCKS.register(bus)
         ITEMS.register(bus)
@@ -136,9 +179,13 @@ object Registry {
             event.accept(STATIC_CAMERA_BLOCK_ITEM.get())
             event.accept(TELEMETRY_BLOCK_ITEM.get())
             event.accept(CONTROL_BLOCK_ITEM.get())
+            event.accept(RADIO_TRANSMITTER_BLOCK_ITEM.get())
+            event.accept(RADIO_RECEIVER_BLOCK_ITEM.get())
         }
         if (event.tabKey == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(CHANNEL_LINK_TOOL.get())
+            event.accept(ANTENNA_BASIC.get())
+            event.accept(ANTENNA_LONG.get())
         }
     }
 }

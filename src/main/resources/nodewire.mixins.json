@@ -12,7 +12,8 @@
   ],
   "client": [
     "camera.MixinGameRenderer",
-    "camera.MixinVeilBlitHandler"
+    "camera.MixinVeilBlitHandler",
+    "control.MixinMouseHandler"
   ],
   "server": [],
   "injectors": {

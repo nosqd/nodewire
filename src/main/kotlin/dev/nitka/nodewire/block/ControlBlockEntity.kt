@@ -74,10 +74,16 @@ class ControlBlockEntity(pos: BlockPos, state: BlockState) :
 
     override fun readPin(id: String): PinReading? {
         val type = pinType(id) ?: return null
+        val held = liveValues[id]
+        // Absolute aim (MOUSE_LOOK) HOLDS its last value after the pilot leaves,
+        // so a turret stays where it was aimed; momentary inputs (buttons, axes,
+        // mouse delta, scroll, active flags) fall back to defaults when stale.
+        if (held != null && bindings.firstOrNull { it.pin == id }?.kind == BindKind.MOUSE_LOOK) {
+            return PinReading(held)
+        }
         val fresh = liveValues.isNotEmpty() &&
             (level?.let { it.gameTime - lastInputTick <= STALE_TICKS } ?: false)
-        val value = if (fresh) liveValues[id] ?: PinValue.default(type) else PinValue.default(type)
-        return PinReading(value)
+        return PinReading(if (fresh) held ?: PinValue.default(type) else PinValue.default(type))
     }
 
     // ── persistence + sync ────────────────────────────────────────────────

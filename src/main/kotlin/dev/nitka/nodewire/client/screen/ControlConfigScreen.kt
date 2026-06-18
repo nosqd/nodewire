@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.mojang.blaze3d.platform.InputConstants
 import dev.nitka.nodewire.block.control.BindKind
 import dev.nitka.nodewire.block.control.Binding
 import dev.nitka.nodewire.net.SetControlConfigPacket
@@ -115,11 +114,7 @@ class ControlConfigScreen(
         capturing = null
     }
 
-    private fun keyLabel(code: Int): String = when {
-        code < 0 -> "—"
-        code >= Binding.MOUSE_BUTTON_BASE -> "Mouse ${code - Binding.MOUSE_BUTTON_BASE + 1}"
-        else -> InputConstants.Type.KEYSYM.getOrCreate(code).displayName.string
-    }
+    private fun keyLabel(code: Int): String = dev.nitka.nodewire.block.control.KeyNames.label(code)
 
     // ── UI ───────────────────────────────────────────────────────────────
 

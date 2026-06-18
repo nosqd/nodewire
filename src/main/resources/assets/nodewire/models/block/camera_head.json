@@ -1,7 +1,9 @@
 {
   "textures": {
-    "missing": "nodewire:block/logic_block",
-    "particle": "nodewire:block/logic_block"
+    "front": "nodewire:block/camera_block_front",
+    "side": "nodewire:block/camera_block_side",
+    "top": "nodewire:block/camera_block_top",
+    "particle": "nodewire:block/camera_block_side"
   },
   "elements": [
     {
@@ -33,7 +35,7 @@
             6,
             6
           ],
-          "texture": "#missing"
+          "texture": "#side"
         },
         "east": {
           "uv": [
@@ -42,7 +44,7 @@
             10,
             6
           ],
-          "texture": "#missing"
+          "texture": "#side"
         },
         "south": {
           "uv": [
@@ -51,7 +53,7 @@
             6,
             6
           ],
-          "texture": "#missing"
+          "texture": "#front"
         },
         "west": {
           "uv": [
@@ -60,7 +62,7 @@
             10,
             6
           ],
-          "texture": "#missing"
+          "texture": "#side"
         },
         "up": {
           "uv": [
@@ -69,7 +71,7 @@
             6,
             10
           ],
-          "texture": "#missing"
+          "texture": "#top"
         },
         "down": {
           "uv": [
@@ -78,7 +80,7 @@
             6,
             10
           ],
-          "texture": "#missing"
+          "texture": "#side"
         }
       }
     }

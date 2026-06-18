@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:block/cube_all",
   "textures": {
-    "all": "nodewire:block/logic_block"
+    "all": "nodewire:block/telemetry_block"
   }
 }

@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "nodewire:block/camera_block_top",
+    "front": "nodewire:block/camera_block_front",
+    "side": "nodewire:block/camera_block_side"
+  }
+}

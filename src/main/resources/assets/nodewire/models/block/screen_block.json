@@ -1,6 +1,8 @@
 {
-  "parent": "minecraft:block/cube_all",
+  "parent": "minecraft:block/orientable",
   "textures": {
-    "all": "nodewire:block/logic_block"
+    "top": "nodewire:block/screen_block_top",
+    "front": "nodewire:block/screen_block_front",
+    "side": "nodewire:block/screen_block_side"
   }
 }

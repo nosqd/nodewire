@@ -29,6 +29,7 @@ object RadioRegistry {
         val freqKey: Int,
         val range: Double,
         val gain: Double,
+        val crossWorld: Boolean,
         val slots: Array<PinValue?>,
         val video: UUID,
         var stamp: Long,
@@ -54,26 +55,55 @@ object RadioRegistry {
     }
 
     /**
-     * Strongest transmitter on [freqKey] reachable from [rxCenter]. In range if
-     * `dist ≤ TX.range + rxRange` (both antennas extend reach). Strength =
-     * `gain / max(1, distSq)` — bigger antenna and/or closer wins. Prunes stale
-     * entries it walks past.
+     * Strongest transmitter on [freqKey] for this receiver.
+     *
+     * 1. **Local (same dimension):** in range if `dist ≤ TX.range + rxRange`
+     *    (both antennas extend reach); strength = `gain / max(1, distSq)` —
+     *    bigger antenna and/or closer wins. A local match always wins.
+     * 2. **Cross-world fallback:** only when the RX antenna is [rxCrossWorld] and
+     *    no local TX was found — reach a *cross-world* TX in ANOTHER dimension
+     *    (symmetric: both ends need a cross-world antenna). Distance is
+     *    meaningless across dimensions, so these rank by `gain` alone.
+     *
+     * Prunes stale entries it walks past.
      */
     @Synchronized
-    fun best(level: Level, freqKey: Int, rxCenter: Vec3, rxRange: Double, now: Long): TxEntry? {
-        val map = byDim[level.dimension()] ?: return null
+    fun best(level: Level, freqKey: Int, rxCenter: Vec3, rxRange: Double, rxCrossWorld: Boolean, now: Long): TxEntry? {
+        val dim = level.dimension()
+
+        // 1. Local pass.
+        val local = byDim[dim]?.let { map ->
+            var best: TxEntry? = null
+            var bestStrength = -1.0
+            val it = map.values.iterator()
+            while (it.hasNext()) {
+                val e = it.next()
+                if (now - e.stamp > STALE_TICKS) { it.remove(); continue }
+                if (e.freqKey != freqKey) continue
+                val distSq = e.center.distanceToSqr(rxCenter)
+                val reach = e.range + rxRange
+                if (distSq > reach * reach) continue
+                val strength = e.gain / Math.max(1.0, distSq)
+                if (strength > bestStrength) { bestStrength = strength; best = e }
+            }
+            best
+        }
+        if (local != null) return local
+
+        // 2. Cross-world fallback.
+        if (!rxCrossWorld) return null
         var best: TxEntry? = null
-        var bestStrength = -1.0
-        val it = map.values.iterator()
-        while (it.hasNext()) {
-            val e = it.next()
-            if (now - e.stamp > STALE_TICKS) { it.remove(); continue }
-            if (e.freqKey != freqKey) continue
-            val distSq = e.center.distanceToSqr(rxCenter)
-            val reach = e.range + rxRange
-            if (distSq > reach * reach) continue
-            val strength = e.gain / Math.max(1.0, distSq)
-            if (strength > bestStrength) { bestStrength = strength; best = e }
+        var bestGain = -1.0
+        for ((d, map) in byDim) {
+            if (d == dim) continue
+            val it = map.values.iterator()
+            while (it.hasNext()) {
+                val e = it.next()
+                if (now - e.stamp > STALE_TICKS) { it.remove(); continue }
+                if (e.freqKey != freqKey) continue
+                if (!e.crossWorld) continue
+                if (e.gain > bestGain) { bestGain = e.gain; best = e }
+            }
         }
         return best
     }

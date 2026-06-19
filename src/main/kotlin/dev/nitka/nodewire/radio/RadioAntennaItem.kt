@@ -8,13 +8,15 @@ import net.minecraft.world.item.TooltipFlag
 /**
  * An antenna that slots into a Radio Transmitter / Receiver to grant range.
  * [range] is the broadcast/receive reach in blocks; [gain] biases the
- * "strongest wins" contest. Plain data item — the radio block reads these off
- * the held stack's item.
+ * "strongest wins" contest. [crossWorld] antennas additionally bridge across
+ * dimensions (both ends must be cross-world; see [RadioRegistry.best]). Plain
+ * data item — the radio block reads these off the held stack's item.
  */
 class RadioAntennaItem(
     props: Properties,
     val range: Double,
     val gain: Double,
+    val crossWorld: Boolean = false,
 ) : Item(props) {
 
     override fun appendHoverText(
@@ -25,6 +27,12 @@ class RadioAntennaItem(
     ) {
         tooltip.add(Component.literal("Range: ${range.toInt()} m").withStyle(net.minecraft.ChatFormatting.AQUA))
         tooltip.add(Component.literal("Gain: $gain").withStyle(net.minecraft.ChatFormatting.DARK_AQUA))
+        if (crossWorld) {
+            tooltip.add(
+                Component.literal("Cross-dimension (needs one on both ends)")
+                    .withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE),
+            )
+        }
         tooltip.add(
             Component.literal("Slot into a Radio Transmitter / Receiver")
                 .withStyle(net.minecraft.ChatFormatting.DARK_GRAY),

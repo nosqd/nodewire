@@ -104,12 +104,18 @@ object Registry {
 
     /** Basic antenna — medium omnidirectional range. */
     val ANTENNA_BASIC: DeferredItem<RadioAntennaItem> = ITEMS.register("antenna_basic") { _ ->
-        RadioAntennaItem(Item.Properties().stacksTo(1), range = 128.0, gain = 1.0)
+        RadioAntennaItem(Item.Properties().stacksTo(1), range = 512.0, gain = 1.0)
     }
 
     /** Long-range antenna — wider reach + higher gain (wins the "strongest" contest). */
     val ANTENNA_LONG: DeferredItem<RadioAntennaItem> = ITEMS.register("antenna_long") { _ ->
-        RadioAntennaItem(Item.Properties().stacksTo(1), range = 512.0, gain = 4.0)
+        RadioAntennaItem(Item.Properties().stacksTo(1), range = 2048.0, gain = 4.0)
+    }
+
+    /** Quantum antenna — bridges across dimensions (both ends need one) and huge
+     *  in-dimension reach. The cross-world "ansible" tier. */
+    val ANTENNA_QUANTUM: DeferredItem<RadioAntennaItem> = ITEMS.register("antenna_quantum") { _ ->
+        RadioAntennaItem(Item.Properties().stacksTo(1), range = 8192.0, gain = 8.0, crossWorld = true)
     }
 
     val LOGIC_BLOCK_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<LogicBlockEntity>> =
@@ -186,6 +192,7 @@ object Registry {
             event.accept(CHANNEL_LINK_TOOL.get())
             event.accept(ANTENNA_BASIC.get())
             event.accept(ANTENNA_LONG.get())
+            event.accept(ANTENNA_QUANTUM.get())
         }
     }
 }

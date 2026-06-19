@@ -31,6 +31,9 @@ class AntennaSlot {
     /** Strength bias for the "strongest wins" contest. */
     fun gain(): Double = antenna()?.gain ?: BASE_GAIN
 
+    /** Whether the installed antenna can bridge across dimensions. */
+    fun crossWorld(): Boolean = antenna()?.crossWorld ?: false
+
     fun save(tag: CompoundTag, registries: HolderLookup.Provider) {
         tag.put(KEY, handler.serializeNBT(registries))
     }
@@ -42,8 +45,8 @@ class AntennaSlot {
     companion object {
         private const val KEY = "antenna"
 
-        /** Reach with no antenna installed — basically touching distance. */
-        const val BASE_RANGE = 16.0
+        /** Reach with no antenna installed — short, so antennas always matter. */
+        const val BASE_RANGE = 32.0
         const val BASE_GAIN = 0.25
     }
 }

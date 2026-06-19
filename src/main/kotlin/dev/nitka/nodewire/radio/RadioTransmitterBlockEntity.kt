@@ -92,6 +92,7 @@ class RadioTransmitterBlockEntity(pos: BlockPos, state: BlockState) :
                 freqKey = RadioRegistry.freqKey(frequency),
                 range = antenna.range(),
                 gain = antenna.gain(),
+                crossWorld = antenna.crossWorld(),
                 slots = slots.copyOf(),
                 video = videoHandle,
                 stamp = level.gameTime,

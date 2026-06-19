@@ -102,6 +102,7 @@ class RadioReceiverBlockEntity(pos: BlockPos, state: BlockState) :
                 freqKey = RadioRegistry.freqKey(frequency),
                 rxCenter = worldCenter(level),
                 rxRange = antenna.range(),
+                rxCrossWorld = antenna.crossWorld(),
                 now = now,
             )
         }

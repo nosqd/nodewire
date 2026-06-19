@@ -10,6 +10,7 @@
   "item.nodewire.channel_link_tool": "Channel Link Tool",
   "item.nodewire.antenna_basic": "Basic Antenna",
   "item.nodewire.antenna_long": "Long-Range Antenna",
+  "item.nodewire.antenna_quantum": "Quantum Antenna",
 
   "key.categories.nodewire": "Nodewire",
   "key.nodewire.open_demo": "Open UI demo (dev)",

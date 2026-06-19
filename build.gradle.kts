@@ -248,6 +248,11 @@ dependencies {
     // Sable installed, SableCompanion.INSTANCE returns no-op stubs.
     compileOnly("dev.ryanhcode.sable-companion:sable-companion-common-1.21.1:1.6.0")
 
+    // --- Sable Schematic API — compile-time only (not on any maven; local jar
+    // in libs/). Lets Nodewire register a blueprint mapper so pin links survive
+    // schematic copy-paste. Gated at runtime by ModList("sable_schematic_api"). ---
+    compileOnly(files("libs/sable-schematic-api-0.2.6.jar"))
+
     // --- Sable itself — runtime, required by Create Aeronautics anyway ---
     // Aeronautics declares Sable as a hard dependency, so the dev runtime has to
     // ship Sable; pinning 1.2.2 (latest 1.21.1 NeoForge build). Sable replaces

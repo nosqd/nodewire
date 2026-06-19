@@ -1,5 +1,7 @@
 package dev.nitka.nodewire
 
+import dev.nitka.nodewire.block.ArHubBlock
+import dev.nitka.nodewire.block.ArHubBlockEntity
 import dev.nitka.nodewire.block.CameraBlock
 import dev.nitka.nodewire.block.CameraBlockEntity
 import dev.nitka.nodewire.block.LogicBlock
@@ -10,6 +12,7 @@ import dev.nitka.nodewire.block.ScreenBlock
 import dev.nitka.nodewire.block.ScreenBlockEntity
 import dev.nitka.nodewire.block.TelemetryBlock
 import dev.nitka.nodewire.block.TelemetryBlockEntity
+import dev.nitka.nodewire.item.ArGlassesItem
 import dev.nitka.nodewire.item.ChannelLinkToolItem
 import dev.nitka.nodewire.radio.RadioAntennaItem
 import dev.nitka.nodewire.radio.RadioReceiverBlock
@@ -118,6 +121,21 @@ object Registry {
         RadioAntennaItem(Item.Properties().stacksTo(1), range = 8192.0, gain = 8.0, crossWorld = true)
     }
 
+    // ── AR Glasses & Hub ──────────────────────────────────────────────────
+
+    val AR_HUB_BLOCK: DeferredBlock<ArHubBlock> = BLOCKS.register("ar_hub_block") { _ ->
+        ArHubBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK))
+    }
+
+    val AR_HUB_BLOCK_ITEM: DeferredItem<BlockItem> =
+        ITEMS.registerSimpleBlockItem(AR_HUB_BLOCK)
+
+    val AR_GLASSES_ITEM: DeferredItem<ArGlassesItem> = ITEMS.register("ar_glasses") { _ ->
+        ArGlassesItem(Item.Properties().stacksTo(1))
+    }
+
+    // ── Block Entities ────────────────────────────────────────────────────
+
     val LOGIC_BLOCK_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<LogicBlockEntity>> =
         BLOCK_ENTITIES.register("logic_block") { _ ->
             BlockEntityType.Builder
@@ -167,6 +185,13 @@ object Registry {
                 .build(null)
         }
 
+    val AR_HUB_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<ArHubBlockEntity>> =
+        BLOCK_ENTITIES.register("ar_hub_block") { _ ->
+            BlockEntityType.Builder
+                .of(::ArHubBlockEntity, AR_HUB_BLOCK.get())
+                .build(null)
+        }
+
     fun register(bus: IEventBus) {
         BLOCKS.register(bus)
         ITEMS.register(bus)
@@ -187,12 +212,14 @@ object Registry {
             event.accept(CONTROL_BLOCK_ITEM.get())
             event.accept(RADIO_TRANSMITTER_BLOCK_ITEM.get())
             event.accept(RADIO_RECEIVER_BLOCK_ITEM.get())
+            event.accept(AR_HUB_BLOCK_ITEM.get())
         }
         if (event.tabKey == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(CHANNEL_LINK_TOOL.get())
             event.accept(ANTENNA_BASIC.get())
             event.accept(ANTENNA_LONG.get())
             event.accept(ANTENNA_QUANTUM.get())
+            event.accept(AR_GLASSES_ITEM.get())
         }
     }
 }

@@ -11,6 +11,7 @@ import dev.nitka.nodewire.client.link.LinkHudRenderer
 import dev.nitka.nodewire.client.script.ClientScriptCommand
 import dev.nitka.nodewire.client.screen.ScreenBlockRenderer
 import dev.nitka.nodewire.client.script.ClientScriptDriver
+import dev.nitka.nodewire.client.video.ArClientState
 import dev.nitka.nodewire.client.video.VideoManager
 import dev.nitka.nodewire.client.wire.WireWorldRenderer
 import dev.nitka.nodewire.ui.dev.DemoScreen
@@ -102,6 +103,8 @@ object NodewireClient {
         FORGE_BUS.addListener(::onMouseScroll)
         // Channel Link Tool inline pin window — hover state + HUD draw.
         FORGE_BUS.addListener<net.neoforged.neoforge.client.event.RenderGuiEvent.Post>(LinkHudRenderer::onRenderGui)
+        // AR Glasses: render video FBO under the vanilla HUD.
+        FORGE_BUS.addListener<net.neoforged.neoforge.client.event.RenderGuiEvent.Pre>(ArClientState::onRenderGuiPre)
         // Control Block piloting: suppress vanilla movement/interaction + HUD.
         FORGE_BUS.addListener(::onMovementInput)
         FORGE_BUS.addListener(::onInteractionKey)
@@ -115,6 +118,8 @@ object NodewireClient {
         // Video handle GC sweep — runs every client tick regardless of whether a
         // screen is open (the early-return below only gates the dev keybind).
         VideoManager.onClientTick()
+        // AR Glasses: resize surface to GUI scale, detect wear state changes.
+        ArClientState.onClientTick(event)
         // Refresh the Link Tool hover window from the crosshair (no-ops / clears
         // itself when the tool isn't held or a screen is open).
         LinkHud.update()

@@ -14,14 +14,9 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.EquipmentSlot
 import net.neoforged.neoforge.client.event.ClientTickEvent
 import net.neoforged.neoforge.client.event.RenderGuiEvent
-import org.slf4j.Logger
-import com.mojang.logging.LogUtils
-
 import java.util.UUID
 
 object ArClientState {
-    private val LOG: Logger = LogUtils.getLogger()
-
     @Volatile
     var activeHandle: UUID = RadioChannels.NIL_HANDLE
 
@@ -54,8 +49,6 @@ object ArClientState {
         val wearing = stack.item is ArGlassesItem
         if (!wearing) return
 
-        LOG.info("AR: rendering pre, handle={}", activeHandle)
-
         RenderSystem.disableDepthTest()
         try {
             if (activeHandle == RadioChannels.NIL_HANDLE) {
@@ -75,8 +68,6 @@ object ArClientState {
             val texId = surface.colorTextureId()
             val w = mc.window.guiScaledWidth
             val h = mc.window.guiScaledHeight
-
-            LOG.info("AR: blit texId={}, w={}, h={}", texId, w, h)
 
             RenderSystem.enableBlend()
             RenderSystem.defaultBlendFunc()

@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.VertexFormat
 import dev.nitka.nodewire.block.ScreenBlock
 import dev.nitka.nodewire.block.ScreenBlockEntity
 import dev.nitka.nodewire.client.video.GlVideoSurface
+import dev.nitka.nodewire.client.video.VideoBlit
 import dev.nitka.nodewire.client.video.VideoManager
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.RenderStateShard
@@ -64,10 +65,10 @@ class ScreenBlockRenderer(
         if (handle != null) {
             val surface = VideoManager.getOrCreate(handle) as? GlVideoSurface ?: return
             texId = surface.colorTextureId()
-            // Below the clean threshold AND a compiled noise shader → degrade with
-            // static; otherwise a clean blit (also the fallback if the shader
-            // didn't load). CLEAN_SIGNAL must match the shader's CLEAN constant.
-            useNoise = signal < CLEAN_SIGNAL && ScreenNoiseShader.instance != null
+            // Below the clean threshold (and the shader loaded) → degrade with
+            // static; otherwise a clean blit. The single VideoBlit pipeline owns
+            // the shader/threshold so every video draw site behaves identically.
+            useNoise = VideoBlit.noisy(signal)
         } else {
             // No picture. An ACTIVE radio link with no transmitter (signal ≈ 0)
             // shows a dead-channel full of static; a strong-but-content-less feed
@@ -76,7 +77,7 @@ class ScreenBlockRenderer(
             texId = whitePlaceholderId()
             useNoise = true
         }
-        val type = if (useNoise) noiseTypeFor(texId) else plainTypeFor(texId)
+        val type = if (useNoise) VideoBlit.noiseTypeFor(texId) else VideoBlit.plainTypeFor(texId)
         val consumer = buffers.getBuffer(type)
         // The noise shader reads the signal off vertex-colour alpha; the clean
         // path forces opaque white so the blit shows the FBO verbatim.
@@ -195,10 +196,6 @@ class ScreenBlockRenderer(
     }
 
     companion object {
-        /** At/above this signal the screen is perfectly clean (skip the noise
-         *  shader entirely). Must match `CLEAN` in screen_noise.fsh. */
-        private const val CLEAN_SIGNAL = 0.95f
-
         /** Below this signal, a screen with NO video handle is treated as a dead
          *  channel (full static) rather than blank — i.e. an active radio link
          *  whose transmitter is gone (signal 0). Above it a handle-less screen is
@@ -219,70 +216,5 @@ class ScreenBlockRenderer(
             }
             return t.id
         }
-
-        /** Clean blit — vanilla `position_tex_color` shader (sample × vertexColor),
-         *  unlit, no lightmap; the screen shows the FBO exactly as drawn. */
-        private fun plainTypeFor(texId: Int): RenderType =
-            build(
-                "nodewire_screen",
-                RenderStateShard.ShaderStateShard {
-                    net.minecraft.client.renderer.GameRenderer.getPositionTexColorShader()
-                },
-                texId,
-                null,
-            )
-
-        /** Degraded blit — our `screen_noise` core shader adds grain/tear/dropout
-         *  scaled by `1 - signal` (signal is carried in vertex-colour alpha). */
-        private fun noiseTypeFor(texId: Int): RenderType =
-            build(
-                "nodewire_screen_noise",
-                RenderStateShard.ShaderStateShard { ScreenNoiseShader.instance!! },
-                texId,
-            ) {
-                // Global animation clock for the static — refreshed each flush.
-                ScreenNoiseShader.instance?.safeGetUniform("Time")
-                    ?.set((net.minecraft.Util.getMillis() % 100000L).toFloat() / 1000f)
-            }
-
-        /**
-         * A flat, UNLIT POSITION_TEX_COLOR render type bound to a raw GL texture id
-         * (the FBO colour attachment), with [shader] selecting clean vs noise. The
-         * setup shard binds sampler 0 to the FBO each frame, forces a white shader
-         * colour and NEAREST filtering (the 256² FBO is magnified onto the face;
-         * LINEAR would blur thin text), then runs [extraSetup] (the noise path's
-         * Time uniform).
-         */
-        private fun build(
-            name: String,
-            shader: RenderStateShard.ShaderStateShard,
-            texId: Int,
-            extraSetup: (() -> Unit)?,
-        ): RenderType = RenderType.create(
-            name,
-            DefaultVertexFormat.POSITION_TEX_COLOR,
-            VertexFormat.Mode.QUADS,
-            256,
-            false,
-            false,
-            RenderType.CompositeState.builder()
-                .setShaderState(shader)
-                .setTextureState(object : RenderStateShard.EmptyTextureStateShard(
-                    Runnable {
-                        RenderSystem.setShaderTexture(0, texId)
-                        RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
-                        com.mojang.blaze3d.platform.GlStateManager._bindTexture(texId)
-                        com.mojang.blaze3d.platform.GlStateManager._texParameter(
-                            GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST,
-                        )
-                        com.mojang.blaze3d.platform.GlStateManager._texParameter(
-                            GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST,
-                        )
-                        extraSetup?.invoke()
-                    },
-                    Runnable {},
-                ) {})
-                .createCompositeState(false),
-        )
     }
 }

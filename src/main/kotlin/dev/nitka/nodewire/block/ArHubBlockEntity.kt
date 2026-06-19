@@ -123,11 +123,14 @@ class ArHubBlockEntity(pos: BlockPos, state: BlockState) :
             lastPlayerLook = Vec3.ZERO
         }
 
-        val videoHandle = (channelInputs[VIDEO_PIN] as? PinValue.Video)?.handle
-            ?: dev.nitka.nodewire.radio.RadioChannels.NIL_HANDLE
+        // The video value carries its reception signal (radio < 1, camera = 1) —
+        // forward it so the AR HUD degrades a weak radio feed like a screen does.
+        val video = channelInputs[VIDEO_PIN] as? PinValue.Video
+        val videoHandle = video?.handle ?: dev.nitka.nodewire.radio.RadioChannels.NIL_HANDLE
+        val signal = video?.signal ?: 1f
 
         if (foundPlayer != null) {
-            PacketDistributor.sendToPlayer(foundPlayer, SyncArStatePacket(videoHandle))
+            PacketDistributor.sendToPlayer(foundPlayer, SyncArStatePacket(videoHandle, signal))
             lastBoundPlayerUUID = foundPlayer.uuid
         } else {
             val prev = lastBoundPlayerUUID
@@ -135,7 +138,7 @@ class ArHubBlockEntity(pos: BlockPos, state: BlockState) :
                 val prevPlayer = server.playerList.getPlayer(prev)
                 if (prevPlayer != null) {
                     PacketDistributor.sendToPlayer(
-                        prevPlayer, SyncArStatePacket(dev.nitka.nodewire.radio.RadioChannels.NIL_HANDLE)
+                        prevPlayer, SyncArStatePacket(dev.nitka.nodewire.radio.RadioChannels.NIL_HANDLE, 1f)
                     )
                 }
                 lastBoundPlayerUUID = null
@@ -150,7 +153,7 @@ class ArHubBlockEntity(pos: BlockPos, state: BlockState) :
             val prevPlayer = server.playerList.getPlayer(prev)
             if (prevPlayer != null) {
                 PacketDistributor.sendToPlayer(
-                    prevPlayer, SyncArStatePacket(dev.nitka.nodewire.radio.RadioChannels.NIL_HANDLE)
+                    prevPlayer, SyncArStatePacket(dev.nitka.nodewire.radio.RadioChannels.NIL_HANDLE, 1f)
                 )
             }
             lastBoundPlayerUUID = null

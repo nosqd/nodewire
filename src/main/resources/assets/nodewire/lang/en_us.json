@@ -14,6 +14,8 @@
   "item.nodewire.antenna_long": "Long-Range Antenna",
   "item.nodewire.antenna_quantum": "Quantum Antenna",
 
+  "itemGroup.nodewire": "Nodewire",
+
   "key.categories.nodewire": "Nodewire",
   "key.nodewire.open_demo": "Open UI demo (dev)",
   "key.nodewire.control_mouse": "Control Block: toggle mouse capture",

@@ -20,14 +20,15 @@ import dev.nitka.nodewire.radio.RadioReceiverBlockEntity
 import dev.nitka.nodewire.radio.RadioTransmitterBlock
 import dev.nitka.nodewire.radio.RadioTransmitterBlockEntity
 import net.minecraft.core.registries.Registries
+import net.minecraft.network.chat.Component
 import net.minecraft.world.item.BlockItem
-import net.minecraft.world.item.CreativeModeTabs
+import net.minecraft.world.item.CreativeModeTab
 import net.minecraft.world.item.Item
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockBehaviour
 import net.neoforged.bus.api.IEventBus
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent
 import net.neoforged.neoforge.registries.DeferredBlock
 import net.neoforged.neoforge.registries.DeferredHolder
 import net.neoforged.neoforge.registries.DeferredItem
@@ -40,6 +41,8 @@ object Registry {
         DeferredRegister.createItems(Nodewire.ID)
     private val BLOCK_ENTITIES: DeferredRegister<BlockEntityType<*>> =
         DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, Nodewire.ID)
+    private val CREATIVE_TABS: DeferredRegister<CreativeModeTab> =
+        DeferredRegister.create(Registries.CREATIVE_MODE_TAB, Nodewire.ID)
 
     val LOGIC_BLOCK: DeferredBlock<LogicBlock> = BLOCKS.register("logic_block") { _ ->
         LogicBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK))
@@ -134,6 +137,34 @@ object Registry {
         ArGlassesItem(Item.Properties().stacksTo(1))
     }
 
+    // ── Creative Tab ──────────────────────────────────────────────────────
+
+    /** Dedicated creative tab holding every Nodewire item (blocks first, then
+     *  tools / wearables). Icon is the Logic Block — the system's centrepiece. */
+    val NODEWIRE_TAB: DeferredHolder<CreativeModeTab, CreativeModeTab> =
+        CREATIVE_TABS.register("nodewire") { _ ->
+            CreativeModeTab.builder()
+                .title(Component.translatable("itemGroup.nodewire"))
+                .icon { ItemStack(LOGIC_BLOCK_ITEM.get()) }
+                .displayItems { _, output ->
+                    output.accept(LOGIC_BLOCK_ITEM.get())
+                    output.accept(SCREEN_BLOCK_ITEM.get())
+                    output.accept(CAMERA_BLOCK_ITEM.get())
+                    output.accept(STATIC_CAMERA_BLOCK_ITEM.get())
+                    output.accept(TELEMETRY_BLOCK_ITEM.get())
+                    output.accept(CONTROL_BLOCK_ITEM.get())
+                    output.accept(RADIO_TRANSMITTER_BLOCK_ITEM.get())
+                    output.accept(RADIO_RECEIVER_BLOCK_ITEM.get())
+                    output.accept(AR_HUB_BLOCK_ITEM.get())
+                    output.accept(CHANNEL_LINK_TOOL.get())
+                    output.accept(ANTENNA_BASIC.get())
+                    output.accept(ANTENNA_LONG.get())
+                    output.accept(ANTENNA_QUANTUM.get())
+                    output.accept(AR_GLASSES_ITEM.get())
+                }
+                .build()
+        }
+
     // ── Block Entities ────────────────────────────────────────────────────
 
     val LOGIC_BLOCK_BE: DeferredHolder<BlockEntityType<*>, BlockEntityType<LogicBlockEntity>> =
@@ -196,30 +227,9 @@ object Registry {
         BLOCKS.register(bus)
         ITEMS.register(bus)
         BLOCK_ENTITIES.register(bus)
-        bus.addListener(::onBuildTabs)
+        CREATIVE_TABS.register(bus)
         // Link Tool needs no per-block registration any more: Screen/Camera/
         // Logic implement PinPort directly; foreign blocks resolve through
         // the PinPorts adapters (aero / sensor / redstone fallback).
-    }
-
-    private fun onBuildTabs(event: BuildCreativeModeTabContentsEvent) {
-        if (event.tabKey == CreativeModeTabs.REDSTONE_BLOCKS) {
-            event.accept(LOGIC_BLOCK_ITEM.get())
-            event.accept(SCREEN_BLOCK_ITEM.get())
-            event.accept(CAMERA_BLOCK_ITEM.get())
-            event.accept(STATIC_CAMERA_BLOCK_ITEM.get())
-            event.accept(TELEMETRY_BLOCK_ITEM.get())
-            event.accept(CONTROL_BLOCK_ITEM.get())
-            event.accept(RADIO_TRANSMITTER_BLOCK_ITEM.get())
-            event.accept(RADIO_RECEIVER_BLOCK_ITEM.get())
-            event.accept(AR_HUB_BLOCK_ITEM.get())
-        }
-        if (event.tabKey == CreativeModeTabs.TOOLS_AND_UTILITIES) {
-            event.accept(CHANNEL_LINK_TOOL.get())
-            event.accept(ANTENNA_BASIC.get())
-            event.accept(ANTENNA_LONG.get())
-            event.accept(ANTENNA_QUANTUM.get())
-            event.accept(AR_GLASSES_ITEM.get())
-        }
     }
 }

@@ -90,6 +90,19 @@ object NodewireClient {
             event.register(CameraBlockRenderer.YAW_MODEL)
             event.register(CameraBlockRenderer.HEAD_MODEL)
         }
+        // Custom core shader: screen video-noise (signal-strength → grain). If it
+        // fails to compile the screen just blits cleanly (instance stays null).
+        bus.addListener<net.neoforged.neoforge.client.event.RegisterShadersEvent> { event ->
+            runCatching {
+                event.registerShader(
+                    net.minecraft.client.renderer.ShaderInstance(
+                        event.resourceProvider,
+                        "nodewire:screen_noise",
+                        com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_TEX_COLOR,
+                    ),
+                ) { dev.nitka.nodewire.client.screen.ScreenNoiseShader.instance = it }
+            }.onFailure { LOG.warn("screen_noise shader failed to load: {}", it.message) }
+        }
         FORGE_BUS.addListener(::onClientTick)
         FORGE_BUS.addListener<RenderLevelStageEvent>(WireWorldRenderer::render)
         FORGE_BUS.addListener<RenderLevelStageEvent>(BlockHighlightRenderer::onRender)

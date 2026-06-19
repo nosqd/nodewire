@@ -61,7 +61,16 @@ sealed class PinValue {
         override val type = PinType.QUAT
     }
 
-    data class Video(val handle: java.util.UUID) : PinValue() {
+    /**
+     * A video stream: only the [handle] (UUID) ever crosses the network — never
+     * frames (the net invariant). [signal] is a TRANSIENT 0..1 reception quality
+     * that rides WITH the value through the graph: 1 = perfect (a camera, a wired
+     * link, a script) and never serialized; a Radio Receiver re-emits the same
+     * handle with its weaker [signal] so the screen can degrade ONLY radio video
+     * with noise, automatically. Not part of the persisted identity (the codec
+     * carries the handle alone; decode restores [signal] = 1).
+     */
+    data class Video(val handle: java.util.UUID, val signal: kotlin.Float = 1f) : PinValue() {
         override val type = PinType.VIDEO
     }
 
@@ -139,7 +148,8 @@ sealed class PinValue {
         private val VideoCodec: com.mojang.serialization.MapCodec<Video> =
             com.mojang.serialization.codecs.RecordCodecBuilder.mapCodec { i ->
                 i.group(net.minecraft.core.UUIDUtil.CODEC.fieldOf("h").forGetter(Video::handle))
-                    .apply(i, ::Video)
+                    // handle only — [Video.signal] is transient (decode → 1).
+                    .apply(i) { h -> Video(h) }
             }
 
         /**

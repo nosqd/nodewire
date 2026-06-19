@@ -44,9 +44,12 @@ object VideoCameraCapture {
 
     /**
      * Only render a feed whose camera is within this many blocks of the player.
-     * Rendering the world from a camera POV near the edge of (or beyond) the
-     * player's render distance thrashes the chunk render dispatcher and makes
-     * the player's own chunks flicker, so far cameras are skipped entirely.
+     * Rendering the world from a camera POV far from the player re-renders the
+     * chunks around it and thrashes the chunk render dispatcher — the player's
+     * OWN chunks visibly flicker. 16 keeps the camera POV close enough that its
+     * visible-section set overlaps the player's, so there's no thrash. Raising
+     * this naively trades the distance limit for chunk flicker; true far-camera
+     * video needs an off-screen render with its own chunk state (deferred).
      * Measured against the camera's Sable-aware world centre, so a camera on a
      * sub-level the player rides stays in range.
      */
@@ -125,7 +128,7 @@ object VideoCameraCapture {
         val active = all.asSequence()
             .filter { now >= it.lastActiveTimeSec + FRAME_INTERVAL }
             // Distance gate (Sable-aware): skip cameras the player is far from —
-            // rendering their POV near the render-distance edge flickers the
+            // rendering their POV thrashes the chunk dispatcher and flickers the
             // player's own chunks. Unresolvable pose (sub-level gone) -> skip.
             .filter { feed ->
                 feed.worldEye(level, deltaTracker)?.let {

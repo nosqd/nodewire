@@ -30,13 +30,25 @@ object RadioRegistry {
         val range: Double,
         val gain: Double,
         val crossWorld: Boolean,
+        /** World-space unit beam direction; null = omnidirectional. */
+        val aim: Vec3?,
+        /** Lobe exponent; 0 = omni. See [lobe]. */
+        val focus: Double,
         val slots: Array<PinValue?>,
         val video: UUID,
         var stamp: Long,
     )
 
+    /** A resolved reception: the winning transmitter + a 0..1 signal strength
+     *  (1 at the transmitter, → 0 at the edge of reach; fixed for cross-world). */
+    class Match(val tx: TxEntry, val signal: Float)
+
     /** A re-tuning TX older than this many ticks is treated as gone. */
     private const val STALE_TICKS = 5L
+
+    /** Cross-dimension links have no meaningful distance — they're inherently
+     *  long-haul, so the received signal is fixed at a degraded level. */
+    private const val CROSS_WORLD_SIGNAL = 0.5f
 
     // dimension → (transmitter pos → entry)
     private val byDim = HashMap<ResourceKey<Level>, HashMap<BlockPos, TxEntry>>()
@@ -55,44 +67,54 @@ object RadioRegistry {
     }
 
     /**
-     * Strongest transmitter on [freqKey] for this receiver.
+     * Strongest transmitter on [freqKey] for the receiver at [rxCenter] with
+     * antenna profile [rx].
      *
-     * 1. **Local (same dimension):** in range if `dist ≤ TX.range + rxRange`
-     *    (both antennas extend reach); strength = `gain / max(1, distSq)` —
-     *    bigger antenna and/or closer wins. A local match always wins.
-     * 2. **Cross-world fallback:** only when the RX antenna is [rxCrossWorld] and
-     *    no local TX was found — reach a *cross-world* TX in ANOTHER dimension
-     *    (symmetric: both ends need a cross-world antenna). Distance is
+     * 1. **Local (same dimension):** [localStrength] — in range if
+     *    `dist ≤ TX.range + rx.range`, scaled by both antennas' directional
+     *    lobes; a local match always wins.
+     * 2. **Cross-world fallback:** only when [rx] is `crossWorld` and no local TX
+     *    was found — reach a *cross-world* TX in ANOTHER dimension (symmetric:
+     *    both ends need a cross-world antenna). Distance/direction are
      *    meaningless across dimensions, so these rank by `gain` alone.
      *
      * Prunes stale entries it walks past.
      */
     @Synchronized
-    fun best(level: Level, freqKey: Int, rxCenter: Vec3, rxRange: Double, rxCrossWorld: Boolean, now: Long): TxEntry? {
+    fun best(level: Level, freqKey: Int, rxCenter: Vec3, rx: AntennaProfile, now: Long): Match? {
         val dim = level.dimension()
 
         // 1. Local pass.
-        val local = byDim[dim]?.let { map ->
-            var best: TxEntry? = null
-            var bestStrength = -1.0
+        var localBest: TxEntry? = null
+        var bestStrength = -1.0
+        var bestDistSq = 0.0
+        byDim[dim]?.let { map ->
             val it = map.values.iterator()
             while (it.hasNext()) {
                 val e = it.next()
                 if (now - e.stamp > STALE_TICKS) { it.remove(); continue }
                 if (e.freqKey != freqKey) continue
-                val distSq = e.center.distanceToSqr(rxCenter)
-                val reach = e.range + rxRange
-                if (distSq > reach * reach) continue
-                val strength = e.gain / Math.max(1.0, distSq)
-                if (strength > bestStrength) { bestStrength = strength; best = e }
+                val strength = localStrength(e, rxCenter, rx)
+                if (strength > bestStrength) {
+                    bestStrength = strength
+                    localBest = e
+                    bestDistSq = e.center.distanceToSqr(rxCenter)
+                }
             }
-            best
         }
-        if (local != null) return local
+        localBest?.let { e ->
+            // Signal = 1 - (dist/reach)²  — quadratic so it stays near 1 over a
+            // generous clean zone close to the transmitter and only falls off
+            // sharply near the edge of combined reach (1 at the TX, 0 at the edge).
+            val reach = e.range + rx.range
+            val d = Math.sqrt(bestDistSq) / reach
+            val sig = (1.0 - d * d).coerceIn(0.0, 1.0).toFloat()
+            return Match(e, sig)
+        }
 
         // 2. Cross-world fallback.
-        if (!rxCrossWorld) return null
-        var best: TxEntry? = null
+        if (!rx.crossWorld) return null
+        var cwBest: TxEntry? = null
         var bestGain = -1.0
         for ((d, map) in byDim) {
             if (d == dim) continue
@@ -102,10 +124,47 @@ object RadioRegistry {
                 if (now - e.stamp > STALE_TICKS) { it.remove(); continue }
                 if (e.freqKey != freqKey) continue
                 if (!e.crossWorld) continue
-                if (e.gain > bestGain) { bestGain = e.gain; best = e }
+                if (e.gain > bestGain) { bestGain = e.gain; cwBest = e }
             }
         }
-        return best
+        return cwBest?.let { Match(it, CROSS_WORLD_SIGNAL) }
+    }
+
+    /**
+     * Local-pass signal strength of [e] at [rxCenter], or `< 0` if out of range
+     * or outside either antenna's lobe. `(txGain·gT)·(rxGain·gR) / max(1,distSq)`
+     * where gT/gR are the transmit/receive [lobe] factors. With both antennas
+     * omnidirectional (`aim == null`) gT = gR = 1, so this reduces to the
+     * `gain / dist²` "strongest wins" of the omni case (the rx.gain factor is a
+     * per-query constant and doesn't change which TX wins).
+     */
+    internal fun localStrength(e: TxEntry, rxCenter: Vec3, rx: AntennaProfile): Double {
+        val distSq = e.center.distanceToSqr(rxCenter)
+        val reach = e.range + rx.range
+        if (distSq > reach * reach) return -1.0
+        val toRx = rxCenter.subtract(e.center)            // TX → RX
+        val gT = lobe(e.aim, toRx, e.focus)               // is RX in the TX beam?
+        if (gT <= 0.0) return -1.0
+        val gR = lobe(rx.aim, toRx.scale(-1.0), rx.focus) // is TX in the RX "ear"?
+        if (gR <= 0.0) return -1.0
+        return (e.gain * gT) * (rx.gain * gR) / Math.max(1.0, distSq)
+    }
+
+    /**
+     * Cosine-power lobe `max(0, cosθ)^focus`, where θ is the angle between the
+     * antenna's [aim] and [towardOther] (the direction to the other endpoint).
+     * Omnidirectional (1.0) when [aim] is null or [focus] ≤ 0; 0 when the other
+     * endpoint is behind the antenna (cosθ ≤ 0).
+     */
+    internal fun lobe(aim: Vec3?, towardOther: Vec3, focus: Double): Double {
+        if (aim == null || focus <= 0.0) return 1.0
+        val len = towardOther.length()
+        if (len < 1.0e-9) return 1.0
+        // aim is unit; normalize towardOther. Clamp for float error so on-axis
+        // never exceeds cos=1 (pow(1.0001, k) would peak above 1.0).
+        val cos = (aim.dot(towardOther) / len).coerceIn(-1.0, 1.0)
+        if (cos <= 0.0) return 0.0
+        return Math.pow(cos, focus)
     }
 
     @Synchronized

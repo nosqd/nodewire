@@ -1,489 +1,187 @@
 package dev.nitka.nodewire.client.wire
 
-import com.mojang.blaze3d.vertex.DefaultVertexFormat
-import com.mojang.blaze3d.vertex.VertexConsumer
-import com.mojang.blaze3d.vertex.VertexFormat
 import dev.nitka.nodewire.block.ChannelBinding
 import dev.nitka.nodewire.block.LogicBlockEntity
 import dev.nitka.nodewire.graph.PinType
+import net.createmod.catnip.outliner.Outliner
 import net.minecraft.client.Minecraft
-import net.minecraft.client.renderer.MultiBufferSource
-import net.minecraft.client.renderer.RenderStateShard
-import net.minecraft.client.renderer.RenderType
+import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent
-import org.joml.Matrix4f
-import kotlin.math.sqrt
 
 /**
- * Always-on world rendering of channel bindings between logic blocks.
- * Only renders while the local player holds a ChannelLinkToolItem.
+ * Always-on world rendering of channel bindings between logic blocks, drawn the
+ * Create / Drive-By-Wire way — through catnip's [Outliner] (Create renders the
+ * global instance every frame with a robust, Veil/Sodium-safe pass) instead of a
+ * hand-rolled immediate-mode quad batch. Endpoint positions come from
+ * [dev.nitka.nodewire.endpoint.EndpointRef.worldCenter], which is Sable-aware
+ * (a block on a sub-level reports its LIVE render-pose world centre), so wires
+ * track ships/aircraft for free.
  *
- * Per binding we draw:
- *   1. A straight, camera-facing colored quad — source-center to target-center.
+ * Only shown while the local player holds a ChannelLinkToolItem. Each wire is
+ * refreshed (kept alive) every frame under a stable key; retired wires (tool put
+ * away, binding removed) are [Outliner.remove]d so they vanish at once.
  *
- * Multiple bindings that share an endpoint are *fanned out* radially around
- * the block center so each line is visible on its own — without it three
- * wires going out of a single block would Z-fight as one line.
+ * Per shared endpoint, wires fan out radially so several lines out of one block
+ * don't Z-fight as one.
  */
 object WireWorldRenderer {
 
-    private object Shards : RenderStateShard("", Runnable {}, Runnable {}) {
-        val POSITION_COLOR = POSITION_COLOR_SHADER
-        val NO_LIGHTMAP = RenderStateShard.NO_LIGHTMAP
-        val TRANSLUCENT = TRANSLUCENT_TRANSPARENCY
-        val NO_CULL_S = NO_CULL
-        val COLOR_DEPTH = COLOR_DEPTH_WRITE
-        val NO_DEPTH = NO_DEPTH_TEST
-    }
+    private const val WIRE_WIDTH = 1.0f / 16f
 
-    private val WIRE_TYPE: RenderType = RenderType.create(
-        "nodewire_wire",
-        DefaultVertexFormat.POSITION_COLOR,
-        VertexFormat.Mode.QUADS,
-        256,
-        false,
-        false,
-        RenderType.CompositeState.builder()
-            .setShaderState(Shards.POSITION_COLOR)
-            .setLightmapState(Shards.NO_LIGHTMAP)
-            .setTransparencyState(Shards.TRANSLUCENT)
-            .setCullState(Shards.NO_CULL_S)
-            .setDepthTestState(Shards.NO_DEPTH)
-            .setWriteMaskState(Shards.COLOR_DEPTH)
-            .createCompositeState(false),
-    )
+    /** Keys shown last frame — diffed so retired wires get removed promptly. */
+    private val shownKeys = HashSet<Any>()
 
     private fun holdingLinkTool(player: net.minecraft.client.player.LocalPlayer): Boolean {
         val link = dev.nitka.nodewire.Registry.CHANNEL_LINK_TOOL.get()
         return player.mainHandItem.`is`(link) || player.offhandItem.`is`(link)
     }
 
+    /** Run once per frame (gated to one render stage). Updates the Outliner line
+     *  set; Create draws the global Outliner itself. */
     fun render(event: RenderLevelStageEvent) {
-        // AFTER_LEVEL fires AFTER Veil's FramebufferStack composes back to the
-        // main target. AFTER_TRANSLUCENT_BLOCKS fires while Veil's FBO is still
-        // bound — under Veil our wires went there but didn't survive compose.
-        if (event.stage != RenderLevelStageEvent.Stage.AFTER_LEVEL) return
+        if (event.stage != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return
         val mc = Minecraft.getInstance()
         val level = mc.level ?: return
         val player = mc.player ?: return
-        if (!holdingLinkTool(player)) return
-        val tracked = ClientLogicBlockTracker.all()
-        if (tracked.isEmpty()) return
 
-        // Pre-compute endpoint-counts so each binding can fan out to a unique
-        // slot. Key: "source pos + source channel" → slots out, and target
-        // pos + target channel → slots in. We just count for now and assign
-        // an index per binding in render order so it stays stable frame-to-
-        // frame (bindings list is ordered).
+        val outliner = Outliner.getInstance()
+        val frameKeys = HashSet<Any>()
+
+        if (holdingLinkTool(player)) {
+            val tracked = ClientLogicBlockTracker.all()
+            if (tracked.isNotEmpty()) collect(level, tracked, outliner, frameKeys)
+        }
+
+        // Retire keys no longer present (tool put away, binding removed).
+        val it = shownKeys.iterator()
+        while (it.hasNext()) {
+            val k = it.next()
+            if (k !in frameKeys) { outliner.remove(k); it.remove() }
+        }
+        shownKeys.addAll(frameKeys)
+    }
+
+    private fun collect(
+        level: net.minecraft.world.level.Level,
+        tracked: Collection<LogicBlockEntity>,
+        outliner: Outliner,
+        frameKeys: MutableSet<Any>,
+    ) {
+        // ── gather + fan-slot assignment (stable iteration = stable slots) ──
         val outCount = HashMap<Long, Int>()
         val inCount = HashMap<Long, Int>()
         val bindList = mutableListOf<RenderBinding>()
         for (source in tracked) {
-            val bindings = source.bindingsSnapshot()
-            if (bindings.isEmpty()) continue
-            for (b in bindings) {
-                val srcKey = source.blockPos.asLong()
-                val dstKey = b.target.payload.blockPos.asLong()
-                val srcIdx = outCount[srcKey] ?: 0
-                val dstIdx = inCount[dstKey] ?: 0
-                outCount[srcKey] = srcIdx + 1
-                inCount[dstKey] = dstIdx + 1
-                bindList.add(RenderBinding(source, b, srcIdx, dstIdx))
+            for (b in source.bindingsSnapshot()) {
+                val sk = source.blockPos.asLong()
+                val dk = b.target.payload.blockPos.asLong()
+                bindList.add(RenderBinding(source, b, outCount.merge(sk, 1, Int::plus)!! - 1, inCount.merge(dk, 1, Int::plus)!! - 1))
             }
         }
-        // Side bindings (drive-by-wire to non-logic targets) — collected
-        // separately because they're rendered as wire + face frame, not as
-        // a paired endpoint with a target channel name.
         val sideList = mutableListOf<RenderSideBinding>()
         for (source in tracked) {
-            val sbs = source.sideBindingsSnapshot()
-            if (sbs.isEmpty()) continue
-            for (sb in sbs) {
-                val srcKey = source.blockPos.asLong()
-                val srcIdx = outCount[srcKey] ?: 0
-                outCount[srcKey] = srcIdx + 1
-                sideList.add(RenderSideBinding(source, sb, srcIdx))
+            for (sb in source.sideBindingsSnapshot()) {
+                val sk = source.blockPos.asLong()
+                sideList.add(RenderSideBinding(source, sb, outCount.merge(sk, 1, Int::plus)!! - 1))
             }
         }
-
-        // Unified pin links (logic block as SINK: camera video, screen touch,
-        // world redstone, another logic block's channel…). Visually: wire
-        // from the source block → logic block, plus a vanilla-style outline
-        // around the source so the user can identify which block is bound.
         val pinLinkList = mutableListOf<RenderPinLink>()
         for (logic in tracked) {
-            val pls = logic.pinLinksSnapshot()
-            if (pls.isEmpty()) continue
-            for (pl in pls) {
-                val dstKey = logic.blockPos.asLong()
-                val dstIdx = inCount[dstKey] ?: 0
-                inCount[dstKey] = dstIdx + 1
-                pinLinkList.add(RenderPinLink(logic, pl, dstIdx))
+            for (pl in logic.pinLinksSnapshot()) {
+                val dk = logic.blockPos.asLong()
+                pinLinkList.add(RenderPinLink(logic, pl, inCount.merge(dk, 1, Int::plus)!! - 1))
             }
         }
-
         if (bindList.isEmpty() && sideList.isEmpty() && pinLinkList.isEmpty()) return
 
-        // Totals per endpoint so we can normalize index→angle.
         val outTotal = HashMap<Long, Int>()
         val inTotal = HashMap<Long, Int>()
         for (rb in bindList) {
             outTotal.merge(rb.source.blockPos.asLong(), 1, Int::plus)
             inTotal.merge(rb.binding.target.payload.blockPos.asLong(), 1, Int::plus)
         }
-        for (sb in sideList) {
-            outTotal.merge(sb.source.blockPos.asLong(), 1, Int::plus)
-        }
-        for (rr in pinLinkList) {
-            inTotal.merge(rr.logic.blockPos.asLong(), 1, Int::plus)
-        }
+        for (sb in sideList) outTotal.merge(sb.source.blockPos.asLong(), 1, Int::plus)
+        for (rr in pinLinkList) inTotal.merge(rr.logic.blockPos.asLong(), 1, Int::plus)
 
-        val cameraPos = event.camera.position
-        val bufferSource = mc.renderBuffers().bufferSource()
-        val builder = bufferSource.getBuffer(WIRE_TYPE)
-
-        // World→view matrix built from the event's authoritative modelViewMatrix
-        // (the camera-rotation NeoForge passes per stage), NOT poseStack.last().
-        // At AFTER_LEVEL — and especially under Veil's deferred pipeline — the
-        // poseStack top no longer carries the camera rotation, so wires
-        // translated-but-didn't-rotate ("floated" when the camera turned).
-        // modelViewMatrix is independent of poseStack manipulation → stays correct.
-        val matrix = Matrix4f(event.modelViewMatrix).translate(
-            (-cameraPos.x).toFloat(),
-            (-cameraPos.y).toFloat(),
-            (-cameraPos.z).toFloat(),
-        )
-
+        // ── emit Outliner lines; positions are Sable-aware via worldCenter ──
         for (rb in bindList) {
-            val srcKey = rb.source.blockPos.asLong()
-            val dstKey = rb.binding.target.payload.blockPos.asLong()
-            val srcCenter = sourceWorldCenter(rb.source, level) ?: continue
-            val dstCenter = rb.binding.target.worldCenter(level) ?: continue
-            val src = fanOffset(srcCenter, rb.srcIdx, outTotal[srcKey]!!)
-            val dst = fanOffset(dstCenter, rb.dstIdx, inTotal[dstKey]!!)
-            val color = colorForBinding(rb.source, rb.binding.sourceChannelName)
-            drawStraightWire(builder, matrix, src, dst, cameraPos, color)
+            val sk = rb.source.blockPos.asLong()
+            val dk = rb.binding.target.payload.blockPos.asLong()
+            val srcC = sourceWorldCenter(rb.source, level) ?: continue
+            val dstC = rb.binding.target.worldCenter(level) ?: continue
+            line(outliner, frameKeys, "nw:bind:$sk:$dk:${rb.binding.sourceChannelName}",
+                fanOffset(srcC, rb.srcIdx, outTotal[sk]!!), fanOffset(dstC, rb.dstIdx, inTotal[dk]!!),
+                colorForBinding(rb.source, rb.binding.sourceChannelName))
         }
         for (rr in pinLinkList) {
-            val dstKey = rr.logic.blockPos.asLong()
-            // Sable-aware source centre (a camera on a sub-level renders at
-            // its world pose); plain world blocks fall back to atCenterOf.
-            val srcCenter = rr.link.source.worldCenter(level)
-                ?: net.minecraft.world.phys.Vec3.atCenterOf(rr.link.source.payload.blockPos)
-            val dstCenter = sourceWorldCenter(rr.logic, level) ?: continue
-            // Use the input-fan slot on the logic block; source side gets
-            // its own fan slot keyed by source pos so multiple sources
-            // spread out around their respective endpoints.
-            val srcKey = rr.link.source.payload.blockPos.asLong()
-            val srcIdx = outCount[srcKey] ?: 0
-            outCount[srcKey] = srcIdx + 1
-            outTotal.merge(srcKey, 1, Int::plus)
-            val src = fanOffset(srcCenter, srcIdx, outTotal[srcKey]!!)
-            val dst = fanOffset(dstCenter, rr.dstIdx, inTotal[dstKey]!!)
-            // Color by the fed channel_input's type (the sink side knows it).
+            val dk = rr.logic.blockPos.asLong()
+            val srcC = rr.link.source.worldCenter(level) ?: Vec3.atCenterOf(rr.link.source.payload.blockPos)
+            val dstC = sourceWorldCenter(rr.logic, level) ?: continue
+            val sk = rr.link.source.payload.blockPos.asLong()
+            val srcIdx = outCount.merge(sk, 1, Int::plus)!! - 1
+            outTotal.merge(sk, 1, Int::plus)
             val tgtType = rr.logic.graph.nodes.values.firstOrNull {
-                it.typeKey.path == "channel_input" &&
-                    it.config.getString("name") == rr.link.targetPin
+                it.typeKey.path == "channel_input" && it.config.getString("name") == rr.link.targetPin
             }?.let { PinType.fromName(it.config.getString("type")) }
-            val color = colorForType(tgtType ?: PinType.REDSTONE)
-            drawStraightWire(builder, matrix, src, dst, cameraPos, color)
+            line(outliner, frameKeys, "nw:pin:$sk:$dk:${rr.link.targetPin}",
+                fanOffset(srcC, srcIdx, outTotal[sk]!!), fanOffset(dstC, rr.dstIdx, inTotal[dk]!!),
+                colorForType(tgtType ?: PinType.REDSTONE))
+            box(outliner, frameKeys, "nw:pinbox:$sk", srcC, 0xFFB83030.toInt())
         }
         for (sb in sideList) {
-            val srcKey = sb.source.blockPos.asLong()
-            val srcCenter = sourceWorldCenter(sb.source, level) ?: continue
+            val sk = sb.source.blockPos.asLong()
+            val srcC = sourceWorldCenter(sb.source, level) ?: continue
             val tCenter = sb.binding.target.worldCenter(level) ?: continue
-            val src = fanOffset(srcCenter, sb.srcIdx, outTotal[srcKey]!!)
-            // Local-frame face normal and tangent basis on that face plane.
-            // Transform each through the target backend so wire endpoint AND
-            // face-frame orientation rotate with the ship/contraption.
-            val localFace = sb.binding.targetSide
-            val ln = localFace.normal
-            val lBasis = faceBasis(localFace)
-            val wn = sb.binding.target.worldDirection(level, Vec3(ln.x.toDouble(), ln.y.toDouble(), ln.z.toDouble())) ?: continue
-            val wu = sb.binding.target.worldDirection(level, Vec3(lBasis.ux, lBasis.uy, lBasis.uz)) ?: continue
-            val wv = sb.binding.target.worldDirection(level, Vec3(lBasis.vx, lBasis.vy, lBasis.vz)) ?: continue
-            val dst = Vec3(
-                tCenter.x + wn.x * 0.5,
-                tCenter.y + wn.y * 0.5,
-                tCenter.z + wn.z * 0.5,
-            )
-            val color = colorForBinding(sb.source, sb.binding.sourceChannelName)
-            drawStraightWire(builder, matrix, src, dst, cameraPos, color)
-            drawFaceFrame(builder, matrix, dst, wn, wu, wv, color)
-        }
-        bufferSource.endBatch(WIRE_TYPE)
-
-        // Vanilla-style outline around each pin-link source block.
-        // Rendered with the LINES render type, separate from the wire batch.
-        if (pinLinkList.isNotEmpty()) {
-            val lineBuf = bufferSource.getBuffer(net.minecraft.client.renderer.RenderType.lines())
-            // Fresh PoseStack seeded from the camera rotation (same reason as the
-            // wire matrix above): renderLineBox needs a PoseStack, and
-            // event.poseStack's top is unreliable at AFTER_LEVEL / under Veil.
-            val pose = com.mojang.blaze3d.vertex.PoseStack()
-            pose.mulPose(event.modelViewMatrix)
-            pose.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z)
-            // De-dup source positions — multiple bindings on the same block
-            // shouldn't stack 12 line passes on the same 12 edges.
-            val seen = HashSet<Long>()
-            for (rr in pinLinkList) {
-                val sp = rr.link.source.payload.blockPos
-                if (!seen.add(sp.asLong())) continue
-                val state = level.getBlockState(sp)
-                val shape = state.getShape(level, sp)
-                val box = if (shape.isEmpty) {
-                    net.minecraft.world.phys.AABB(sp)
-                } else {
-                    shape.bounds().move(sp.x.toDouble(), sp.y.toDouble(), sp.z.toDouble())
-                }
-                net.minecraft.client.renderer.LevelRenderer.renderLineBox(
-                    pose, lineBuf,
-                    box.minX, box.minY, box.minZ,
-                    box.maxX, box.maxY, box.maxZ,
-                    0.72f, 0.19f, 0.19f, 1f,
-                )
-            }
-            bufferSource.endBatch(net.minecraft.client.renderer.RenderType.lines())
+            val n = sb.binding.targetSide.normal
+            val wn = sb.binding.target.worldDirection(level, Vec3(n.x.toDouble(), n.y.toDouble(), n.z.toDouble())) ?: continue
+            val dst = Vec3(tCenter.x + wn.x * 0.5, tCenter.y + wn.y * 0.5, tCenter.z + wn.z * 0.5)
+            line(outliner, frameKeys, "nw:side:$sk:${sb.binding.targetSide}:${sb.binding.sourceChannelName}",
+                fanOffset(srcC, sb.srcIdx, outTotal[sk]!!), dst, colorForBinding(sb.source, sb.binding.sourceChannelName))
         }
     }
 
-    /**
-     * Draws four thin filled quads on the perimeter of the bound face —
-     * a 1‑pixel‑style frame highlighting that this side of the target is
-     * being driven. Y/X/Z normal axes each get a matching local frame.
-     */
-    /**
-     * Resolves the world-space centre of a [LogicBlockEntity]'s position via
-     * [EndpointRef.from] + [EndpointRef.worldCenter]. Returns null when the
-     * BE's position cannot be resolved (e.g. its ship is unloaded), causing
-     * the caller to skip that wire silently.
-     */
-    private fun sourceWorldCenter(
-        be: dev.nitka.nodewire.block.LogicBlockEntity,
-        level: net.minecraft.world.level.Level,
-    ): net.minecraft.world.phys.Vec3? {
-        val ref = dev.nitka.nodewire.endpoint.EndpointRef.from(level, be.blockPos)
-        return ref.worldCenter(level)
+    private fun line(outliner: Outliner, frameKeys: MutableSet<Any>, key: String, a: Vec3, b: Vec3, color: Int) {
+        outliner.showLine(key, a, b).lineWidth(WIRE_WIDTH).colored(color).disableLineNormals().disableCull()
+        frameKeys.add(key)
     }
 
-    /**
-     * [faceCenter] is the pre-resolved world-space centre of the block face
-     * (i.e. block world centre + worldFaceNormal * 0.5). [worldN], [worldU],
-     * [worldV] are the face normal and tangent basis vectors already
-     * transformed into world space — so on a rotated ship/contraption the
-     * frame stays aligned with the actual face rather than world axes.
-     */
-    private fun drawFaceFrame(
-        builder: com.mojang.blaze3d.vertex.VertexConsumer,
-        matrix: Matrix4f,
-        faceCenter: net.minecraft.world.phys.Vec3,
-        worldN: net.minecraft.world.phys.Vec3,
-        worldU: net.minecraft.world.phys.Vec3,
-        worldV: net.minecraft.world.phys.Vec3,
-        color: Int,
-    ) {
-        // Outset the frame slightly past the block face so we don't z-fight
-        // with the block texture.
-        val outset = 0.005
-        val thick = FRAME_THICKNESS
-        // Centre of the face plane, outset slightly along the world normal.
-        val fx = faceCenter.x + worldN.x * outset
-        val fy = faceCenter.y + worldN.y * outset
-        val fz = faceCenter.z + worldN.z * outset
-        val ux = worldU.x; val uy = worldU.y; val uz = worldU.z
-        val vx = worldV.x; val vy = worldV.y; val vz = worldV.z
-        // Half-extents along u and v.
-        val half = 0.5
-        val a = (color ushr 24) and 0xFF
-        val r = (color ushr 16) and 0xFF
-        val g = (color ushr 8) and 0xFF
-        val b = color and 0xFF
-
-        // Four edges of the square. Each edge is a thin rectangle: along
-        // the edge direction, narrow across.
-        // Edge centres (in u,v plane coordinates):
-        //   top: ( 0, +half), bot: ( 0, -half), L: (-half, 0), R: (+half, 0)
-        // Edge: top — runs along u, narrow along v.
-        emitEdge(builder, matrix,
-            fx, fy, fz,
-            ux, uy, uz, vx, vy, vz,
-            0.0, +half, half, thick * 0.5, r, g, b, a)
-        emitEdge(builder, matrix,
-            fx, fy, fz,
-            ux, uy, uz, vx, vy, vz,
-            0.0, -half, half, thick * 0.5, r, g, b, a)
-        // Edge: left — runs along v, narrow along u.
-        emitEdge(builder, matrix,
-            fx, fy, fz,
-            vx, vy, vz, ux, uy, uz,
-            0.0, -half, half, thick * 0.5, r, g, b, a)
-        emitEdge(builder, matrix,
-            fx, fy, fz,
-            vx, vy, vz, ux, uy, uz,
-            0.0, +half, half, thick * 0.5, r, g, b, a)
+    private fun box(outliner: Outliner, frameKeys: MutableSet<Any>, key: String, center: Vec3, color: Int) {
+        outliner.showAABB(key, AABB.ofSize(center, 1.02, 1.02, 1.02)).lineWidth(WIRE_WIDTH).colored(color).disableCull()
+        frameKeys.add(key)
     }
 
-    /**
-     * Emits one rectangle on the face plane centred at (centre_u, centre_v)
-     * relative to the face centre, length [length] along (ux,uy,uz),
-     * half-width [halfWidth] along the perpendicular (vx,vy,vz).
-     */
-    private fun emitEdge(
-        builder: com.mojang.blaze3d.vertex.VertexConsumer,
-        matrix: Matrix4f,
-        cx: Double, cy: Double, cz: Double,
-        ux: Double, uy: Double, uz: Double,
-        vx: Double, vy: Double, vz: Double,
-        offsetU: Double, offsetV: Double,
-        length: Double, halfWidth: Double,
-        r: Int, g: Int, b: Int, a: Int,
-    ) {
-        val ex = cx + ux * offsetU + vx * offsetV
-        val ey = cy + uy * offsetU + vy * offsetV
-        val ez = cz + uz * offsetU + vz * offsetV
-        // Quad vertices: (-length,-halfWidth), (+length,-halfWidth), (+length,+halfWidth), (-length,+halfWidth)
-        val l = length
-        val w = halfWidth
-        emit(builder, matrix, ex - ux * l - vx * w, ey - uy * l - vy * w, ez - uz * l - vz * w, r, g, b, a)
-        emit(builder, matrix, ex + ux * l - vx * w, ey + uy * l - vy * w, ez + uz * l - vz * w, r, g, b, a)
-        emit(builder, matrix, ex + ux * l + vx * w, ey + uy * l + vy * w, ez + uz * l + vz * w, r, g, b, a)
-        emit(builder, matrix, ex - ux * l + vx * w, ey - uy * l + vy * w, ez - uz * l + vz * w, r, g, b, a)
-    }
+    private fun sourceWorldCenter(be: LogicBlockEntity, level: net.minecraft.world.level.Level): Vec3? =
+        dev.nitka.nodewire.endpoint.EndpointRef.from(level, be.blockPos).worldCenter(level)
 
-    /**
-     * Pick two unit vectors u, v on the face plane such that u × v = face
-     * normal. Stored as a flat tuple for easy destructuring.
-     */
-    private fun faceBasis(face: net.minecraft.core.Direction): FaceBasis = when (face) {
-        net.minecraft.core.Direction.UP, net.minecraft.core.Direction.DOWN ->
-            FaceBasis(1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
-        net.minecraft.core.Direction.NORTH, net.minecraft.core.Direction.SOUTH ->
-            FaceBasis(1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
-        net.minecraft.core.Direction.WEST, net.minecraft.core.Direction.EAST ->
-            FaceBasis(0.0, 0.0, 1.0, 0.0, 1.0, 0.0)
-    }
-
-    private data class FaceBasis(
-        val ux: Double, val uy: Double, val uz: Double,
-        val vx: Double, val vy: Double, val vz: Double,
-    )
-
-    /**
-     * If [total] is 1, returns [center] unchanged. Otherwise spreads N
-     * endpoints around a small horizontal circle so each wire's endpoint
-     * is visually distinct.
-     */
     private fun fanOffset(center: Vec3, index: Int, total: Int): Vec3 {
         if (total <= 1) return center
         val radius = 0.22
         val angle = (Math.PI * 2.0 * index) / total
-        return Vec3(
-            center.x + Math.cos(angle) * radius,
-            center.y,
-            center.z + Math.sin(angle) * radius,
-        )
-    }
-
-    private fun drawStraightWire(
-        builder: VertexConsumer,
-        matrix: Matrix4f,
-        src: Vec3,
-        dst: Vec3,
-        cameraPos: Vec3,
-        color: Int,
-    ) {
-        val dx = dst.x - src.x
-        val dy = dst.y - src.y
-        val dz = dst.z - src.z
-        val len = sqrt(dx * dx + dy * dy + dz * dz)
-        if (len < 1e-4) return
-
-        val midX = (src.x + dst.x) * 0.5
-        val midY = (src.y + dst.y) * 0.5
-        val midZ = (src.z + dst.z) * 0.5
-        var vx = cameraPos.x - midX
-        var vy = cameraPos.y - midY
-        var vz = cameraPos.z - midZ
-        val vlen = sqrt(vx * vx + vy * vy + vz * vz)
-        if (vlen < 1e-4) return
-        vx /= vlen; vy /= vlen; vz /= vlen
-
-        val sdx = dx / len; val sdy = dy / len; val sdz = dz / len
-        var px = sdy * vz - sdz * vy
-        var py = sdz * vx - sdx * vz
-        var pz = sdx * vy - sdy * vx
-        val plen = sqrt(px * px + py * py + pz * pz)
-        if (plen < 1e-4) return
-        val half = WIRE_THICKNESS * 0.5
-        px = px / plen * half; py = py / plen * half; pz = pz / plen * half
-
-        val a = (color ushr 24) and 0xFF
-        val r = (color ushr 16) and 0xFF
-        val g = (color ushr 8) and 0xFF
-        val b = color and 0xFF
-
-        emit(builder, matrix, src.x - px, src.y - py, src.z - pz, r, g, b, a)
-        emit(builder, matrix, src.x + px, src.y + py, src.z + pz, r, g, b, a)
-        emit(builder, matrix, dst.x + px, dst.y + py, dst.z + pz, r, g, b, a)
-        emit(builder, matrix, dst.x - px, dst.y - py, dst.z - pz, r, g, b, a)
-    }
-
-    private fun emit(
-        builder: VertexConsumer,
-        matrix: Matrix4f,
-        x: Double, y: Double, z: Double,
-        r: Int, g: Int, b: Int, a: Int,
-    ) {
-        builder.addVertex(matrix, x.toFloat(), y.toFloat(), z.toFloat())
-            .setColor(r, g, b, a)
+        return Vec3(center.x + Math.cos(angle) * radius, center.y, center.z + Math.sin(angle) * radius)
     }
 
     private fun colorForBinding(source: LogicBlockEntity, channelName: String): Int {
-        val node = source.graph.nodes.values.firstOrNull { node ->
-            node.typeKey.path == "channel_output"
-                && node.config.getString("name") == channelName
-        }
-        val type = node?.config?.getString("type")
-            ?.let { PinType.fromName(it) }
-            ?: return 0xFFFFFFFF.toInt()
+        val type = source.graph.nodes.values.firstOrNull {
+            it.typeKey.path == "channel_output" && it.config.getString("name") == channelName
+        }?.config?.getString("type")?.let { PinType.fromName(it) } ?: return 0xFFFFFFFF.toInt()
         return colorForType(type)
     }
 
     private fun colorForType(type: PinType): Int = when (type) {
-        PinType.BOOL -> 0xFF_E8_5C_5C.toInt()
-        PinType.INT -> 0xFF_5C_C8_E8.toInt()
-        PinType.FLOAT -> 0xFF_E8_C8_5C.toInt()
-        PinType.REDSTONE -> 0xFF_B8_30_30.toInt()
-        PinType.STRING -> 0xFF_F0_8A_4A.toInt()
-        PinType.VEC2 -> 0xFF_7C_E8_5C.toInt()
-        PinType.VEC3 -> 0xFF_AC_E8_5C.toInt()
-        PinType.QUAT -> 0xFF_C8_7C_E8.toInt()
-        PinType.VIDEO -> 0xFF_4A_4A_F0.toInt()
-        // Neutral light-gray for ANY — channel wires generally avoid ANY,
-        // but if one ever appears the wire should still render visibly.
-        PinType.ANY -> 0xFF_9C_A3_AF.toInt()
+        PinType.BOOL -> 0xFFE85C5C.toInt()
+        PinType.INT -> 0xFF5CC8E8.toInt()
+        PinType.FLOAT -> 0xFFE8C85C.toInt()
+        PinType.REDSTONE -> 0xFFB83030.toInt()
+        PinType.STRING -> 0xFFF08A4A.toInt()
+        PinType.VEC2 -> 0xFF7CE85C.toInt()
+        PinType.VEC3 -> 0xFFACE85C.toInt()
+        PinType.QUAT -> 0xFFC87CE8.toInt()
+        PinType.VIDEO -> 0xFF4A4AF0.toInt()
+        PinType.ANY -> 0xFF9CA3AF.toInt()
     }
 
-    private const val WIRE_THICKNESS = 0.08
-    private const val FRAME_THICKNESS = 0.04
-
-    private data class RenderSideBinding(
-        val source: LogicBlockEntity,
-        val binding: dev.nitka.nodewire.block.SideBinding,
-        val srcIdx: Int,
-    )
-
-    private data class RenderBinding(
-        val source: LogicBlockEntity,
-        val binding: ChannelBinding,
-        val srcIdx: Int,
-        val dstIdx: Int,
-    )
-
-    private data class RenderPinLink(
-        val logic: LogicBlockEntity,
-        val link: dev.nitka.nodewire.link.PinLink,
-        val dstIdx: Int,
-    )
+    private data class RenderSideBinding(val source: LogicBlockEntity, val binding: dev.nitka.nodewire.block.SideBinding, val srcIdx: Int)
+    private data class RenderBinding(val source: LogicBlockEntity, val binding: ChannelBinding, val srcIdx: Int, val dstIdx: Int)
+    private data class RenderPinLink(val logic: LogicBlockEntity, val link: dev.nitka.nodewire.link.PinLink, val dstIdx: Int)
 }

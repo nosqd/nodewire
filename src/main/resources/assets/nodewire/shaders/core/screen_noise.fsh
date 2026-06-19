@@ -13,23 +13,11 @@ out vec4 fragColor;
 // noise ramps up smoothly. Keep in sync with ScreenBlockRenderer.CLEAN_SIGNAL.
 const float CLEAN = 0.95;
 
+// Cheap hash noise in [0,1).
 float hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
-}
-
-// Smooth (interpolated) value noise — continuous in space AND time, so scrolling
-// it gives gentle flowing grain instead of a per-frame strobe.
-float vnoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = hash(i);
-    float b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0));
-    float d = hash(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
 void main() {
@@ -43,17 +31,20 @@ void main() {
     vec2 uv = texCoord0;
     float row = floor(uv.y * 256.0);
 
-    // Gentle per-scanline horizontal drift (smooth, slow — no jitter strobe).
-    float tear = (vnoise(vec2(row * 0.25, Time * 2.0)) - 0.5) * 0.12 * heavy;
+    // Per-scanline horizontal tear (wraps like a torn analog signal).
+    float tear = (hash(vec2(row, floor(Time * 20.0))) - 0.5) * 0.18 * heavy;
     uv.x = fract(uv.x + tear);
 
     vec3 color = texture(Sampler0, uv).rgb;
 
-    // Flowing grain: coarse value noise that scrolls continuously (no boiling) and
-    // is compressed to a low-contrast gray band so it never glares / flickers.
-    float g = vnoise(uv * vec2(90.0, 60.0) + vec2(Time * 5.0, Time * 3.0));
-    g = 0.35 + 0.4 * g;
-    color = mix(color, vec3(g), heavy * 0.9);
+    // Animated static — at minimal signal almost nothing of the image survives.
+    float g = hash(uv * vec2(827.0, 491.0) + vec2(Time * 67.0, Time * 39.0));
+    color = mix(color, vec3(g), heavy * 0.92);
+
+    // Gentle brightness wobble (analog gain) — only a slight dimming, never a
+    // bright flash, and slower, so it doesn't strobe / hurt the eyes.
+    float flick = mix(1.0, 0.88 + 0.12 * hash(vec2(floor(Time * 12.0), 7.0)), heavy);
+    color *= flick;
 
     // Force opaque — the screen is a solid panel; vertexColor.a is the signal.
     fragColor = vec4(color, 1.0) * ColorModulator;

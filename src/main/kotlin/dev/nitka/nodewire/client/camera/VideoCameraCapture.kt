@@ -43,18 +43,23 @@ object VideoCameraCapture {
     private const val MAX_ACTIVE = 4
 
     /**
-     * Only render a feed whose camera is within this many blocks of the player.
-     * Rendering the world from a camera POV far from the player re-renders the
-     * chunks around it and thrashes the chunk render dispatcher — the player's
-     * OWN chunks visibly flicker. 16 keeps the camera POV close enough that its
-     * visible-section set overlaps the player's, so there's no thrash. Raising
-     * this naively trades the distance limit for chunk flicker; true far-camera
-     * video needs an off-screen render with its own chunk state (deferred).
+     * Hard ceiling on capture distance (blocks). The effective reach is the
+     * player's render distance clamped to this. The chunk-flicker that used to
+     * force a tiny 16-block cap is fixed by restoring the section-graph dirty
+     * caches after each capture (see the SAVE/RESTORE block below), so the camera
+     * can now reach toward render distance. Capped at 256 because beyond that the
+     * Flywheel/Create render origin thrashes (docs/research flywheel §2.3) and the
+     * camera can only ever show chunks the client has already compiled anyway.
      * Measured against the camera's Sable-aware world centre, so a camera on a
      * sub-level the player rides stays in range.
      */
-    private const val MAX_CAPTURE_DISTANCE = 16.0
-    private const val MAX_CAPTURE_DISTANCE_SQ = MAX_CAPTURE_DISTANCE * MAX_CAPTURE_DISTANCE
+    private const val MAX_CAPTURE_DISTANCE = 256.0
+
+    /** Effective capture reach² this frame = min(render distance, ceiling)². */
+    private fun captureDistanceSq(mc: Minecraft): Double {
+        val d = Math.min(mc.options.renderDistance().get() * 16.0, MAX_CAPTURE_DISTANCE)
+        return d * d
+    }
 
     /** Wall-clock time (GLFW seconds) of the last frame on which we rendered any feed. */
     @Volatile
@@ -125,14 +130,15 @@ object VideoCameraCapture {
         val playerFrustum = lr.frustum // captured ONCE for this frame's selection
 
         var budget = Mth.ceil(FPS_CAP * (all.size + 1).toDouble() / mc.fps.toDouble())
+        val captureSq = captureDistanceSq(mc)
         val active = all.asSequence()
             .filter { now >= it.lastActiveTimeSec + FRAME_INTERVAL }
-            // Distance gate (Sable-aware): skip cameras the player is far from —
-            // rendering their POV thrashes the chunk dispatcher and flickers the
-            // player's own chunks. Unresolvable pose (sub-level gone) -> skip.
+            // Distance gate (Sable-aware): skip cameras beyond the player's render
+            // distance — their chunks aren't loaded/compiled to render anyway.
+            // Unresolvable pose (sub-level gone) -> skip.
             .filter { feed ->
                 feed.worldEye(level, deltaTracker)?.let {
-                    player.distanceToSqr(it) <= MAX_CAPTURE_DISTANCE_SQ
+                    player.distanceToSqr(it) <= captureSq
                 } ?: false
             }
             .filter { it.hasFrameInFrustum(playerFrustum) }
@@ -147,6 +153,21 @@ object VideoCameraCapture {
         val oldWidth = window.width
         val oldHeight = window.height
         val oldVisible = ArrayList(lr.visibleSections)
+        // Section-graph dirty caches. The nested renderLevel runs setupRender for
+        // the camera POV, which rewrites these + the occlusion graph (and clears
+        // visibleSections). The old code restored only visibleSections, so the
+        // next PLAYER frame saw prevCam already == the camera pose, skipped its
+        // own invalidate, and rendered against the camera-built graph → the
+        // player's own chunks flickered. Snapshot them here, restore + invalidate
+        // below so the player frame always rebuilds its own graph.
+        val oldSecX = lr.lastCameraSectionX
+        val oldSecY = lr.lastCameraSectionY
+        val oldSecZ = lr.lastCameraSectionZ
+        val oldPrevCamX = lr.prevCamX
+        val oldPrevCamY = lr.prevCamY
+        val oldPrevCamZ = lr.prevCamZ
+        val oldPrevRotX = lr.prevCamRotX
+        val oldPrevRotY = lr.prevCamRotY
         val oldCameraType = mc.options.cameraType
         val oldMain: RenderTarget = mc.mainRenderTarget
         val oldTransparency = lr.transparencyChain
@@ -238,6 +259,18 @@ object VideoCameraCapture {
             window.setHeight(oldHeight)
             lr.visibleSections.clear()
             lr.visibleSections.addAll(oldVisible)
+            // Restore the section-graph dirty caches and force a rebuild so the
+            // next player frame's setupRender re-derives the graph for the PLAYER,
+            // not the camera POV (the fix for the cross-capture chunk flicker).
+            lr.lastCameraSectionX = oldSecX
+            lr.lastCameraSectionY = oldSecY
+            lr.lastCameraSectionZ = oldSecZ
+            lr.prevCamX = oldPrevCamX
+            lr.prevCamY = oldPrevCamY
+            lr.prevCamZ = oldPrevCamZ
+            lr.prevCamRotX = oldPrevRotX
+            lr.prevCamRotY = oldPrevRotY
+            lr.sectionOcclusionGraph.invalidate()
             player.setPos(oldPlayerX, oldPlayerY, oldPlayerZ)
             player.yRot = oldPlayerYRot
             player.xRot = oldPlayerXRot

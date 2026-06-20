@@ -87,6 +87,31 @@ class ScreenBlockEntity(pos: BlockPos, state: BlockState) :
         if (id == SCREEN_CHANNEL) writeChannelInput(SCREEN_CHANNEL, PinValue.Video(NIL_HANDLE))
     }
 
+    // ── reception signal (drives the client noise shader) ─────────────────
+    // Extracted from the delivered video value (PinValue.Video.signal): a radio
+    // feed carries < 1, a camera / wired link / script carries 1. Quantized +
+    // client-replicated. 1 = perfect (no noise), 0 = pure static.
+    private var signalValue: Float = 1f
+
+    /** CLIENT: reception strength 0..1 the noise shader reads. */
+    fun signal(): Float = signalValue
+
+    /**
+     * Store the reception strength, quantized to 1/20 so a continuously-varying
+     * (distance-based) signal doesn't spam block-update packets — only crossing a
+     * step re-syncs to the client.
+     */
+    private fun setSignal(v: Float) {
+        val q = Math.round(v.coerceIn(0f, 1f) * 20f) / 20f
+        if (q == signalValue) return
+        signalValue = q
+        setChanged()
+        val lvl = level
+        if (lvl != null && !lvl.isClientSide) {
+            lvl.sendBlockUpdated(blockPos, blockState, blockState, Block.UPDATE_CLIENTS)
+        }
+    }
+
     /** The panel anchor this cell belongs to (self when uncovered). */
     private fun anchorOrSelf(): ScreenBlockEntity =
         coveredBy?.let { level?.getBlockEntity(it) as? ScreenBlockEntity }
@@ -304,24 +329,33 @@ class ScreenBlockEntity(pos: BlockPos, state: BlockState) :
                 return
             }
         }
-        val changed = channelInputs[name] != value
+        if (name == SCREEN_CHANNEL) {
+            // The video value carries its reception signal (radio < 1, else 1) —
+            // pull it out for the noise shader, then store a signal-stripped copy
+            // so a moving signal doesn't churn the handle's change-detection.
+            setSignal((value as? PinValue.Video)?.signal ?: 1f)
+            val canonical = PinValue.Video(decodeHandle(value) ?: NIL_HANDLE)
+            val changed = channelInputs[name] != canonical
+            channelInputs[name] = canonical
+            setChanged()
+            val lvl = level
+            if (lvl != null && !lvl.isClientSide) {
+                if (changed) lvl.sendBlockUpdated(blockPos, blockState, blockState, Block.UPDATE_CLIENTS)
+            } else {
+                retargetClientRefcount()
+            }
+            return
+        }
+        // Any other (non-video) channel: store transiently; no client sync needed.
         channelInputs[name] = value
         setChanged()
-        if (name != SCREEN_CHANNEL) return
-        val lvl = level
-        if (lvl != null && !lvl.isClientSide) {
-            // The handle the BER reads lives on the CLIENT, but delivery runs on
-            // the SERVER — push a BE update so the client Screen learns the handle.
-            if (changed) lvl.sendBlockUpdated(blockPos, blockState, blockState, Block.UPDATE_CLIENTS)
-        } else {
-            retargetClientRefcount()
-        }
     }
 
     // ── client sync: the delivered VIDEO handle must reach the client BER ──
     override fun saveAdditional(tag: CompoundTag, registries: HolderLookup.Provider) {
         super.saveAdditional(tag, registries)
         videoHandle()?.let { tag.putUUID(SCREEN_CHANNEL, it) }
+        if (signalValue != 1f) tag.putFloat(TAG_SIGNAL, signalValue)
         if (spanCols != 1 || spanRows != 1) {
             tag.putInt(TAG_SPAN_COLS, spanCols)
             tag.putInt(TAG_SPAN_ROWS, spanRows)
@@ -341,6 +375,7 @@ class ScreenBlockEntity(pos: BlockPos, state: BlockState) :
         } else {
             channelInputs.remove(SCREEN_CHANNEL)
         }
+        signalValue = if (tag.contains(TAG_SIGNAL)) tag.getFloat(TAG_SIGNAL).coerceIn(0f, 1f) else 1f
         spanCols = if (tag.contains(TAG_SPAN_COLS)) tag.getInt(TAG_SPAN_COLS).coerceIn(1, ScreenSpan.MAX) else 1
         spanRows = if (tag.contains(TAG_SPAN_ROWS)) tag.getInt(TAG_SPAN_ROWS).coerceIn(1, ScreenSpan.MAX) else 1
         coveredBy = if (tag.contains(TAG_COVERED_BY)) BlockPos.of(tag.getLong(TAG_COVERED_BY)) else null
@@ -395,6 +430,7 @@ class ScreenBlockEntity(pos: BlockPos, state: BlockState) :
         const val TOUCH_PIN = "touch"
         const val TOUCH_DOWN_PIN = "touch_down"
 
+        private const val TAG_SIGNAL = "signal"
         private const val TAG_SPAN_COLS = "span_cols"
         private const val TAG_SPAN_ROWS = "span_rows"
         private const val TAG_COVERED_BY = "covered_by"

@@ -39,6 +39,12 @@ object Nodewire {
         dev.nitka.nodewire.integration.cbc.CbcIntegration.init()
         // Nodewire Flap Bearing — requires Create Compact Flap. ModList-gated.
         dev.nitka.nodewire.integration.compactflap.CompactFlapIntegration.init(MOD_BUS)
+        // Pin links survive Sable schematic copy-paste (blueprint mapper). Run at
+        // common setup so the BE types are registered + .get()-able; internally
+        // gated on the sable_schematic_api mod, so it's a safe no-op without it.
+        MOD_BUS.addListener<net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent> {
+            dev.nitka.nodewire.integration.sable.SableSchematicIntegration.register()
+        }
         // Coarse server-side teardown: cancel every server script coroutine when
         // the (integrated or dedicated) server stops. Per-BE setRemoved handles
         // the common case, but a server stop without unloading each BE would leave

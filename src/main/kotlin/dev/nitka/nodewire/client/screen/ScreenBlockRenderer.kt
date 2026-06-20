@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.VertexFormat
 import dev.nitka.nodewire.block.ScreenBlock
 import dev.nitka.nodewire.block.ScreenBlockEntity
 import dev.nitka.nodewire.client.video.GlVideoSurface
+import dev.nitka.nodewire.client.video.VideoBlit
 import dev.nitka.nodewire.client.video.VideoManager
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.RenderStateShard
@@ -55,22 +56,39 @@ class ScreenBlockRenderer(
         // quad paints over it (lazily self-heals if the anchor is gone).
         if (be.coveredByValidAnchor()) return
 
-        val handle = be.videoHandle() ?: return
-        val surface = VideoManager.getOrCreate(handle) as? GlVideoSurface ?: return
-        val texId = surface.colorTextureId()
-
         val facing = be.blockState.getValue(ScreenBlock.FACING)
-        val type = renderTypeFor(texId)
+        val signal = be.signal()
+        val handle = be.videoHandle()
+
+        val texId: Int
+        val useNoise: Boolean
+        if (handle != null) {
+            val surface = VideoManager.getOrCreate(handle) as? GlVideoSurface ?: return
+            texId = surface.colorTextureId()
+            // Below the clean threshold (and the shader loaded) → degrade with
+            // static; otherwise a clean blit. The single VideoBlit pipeline owns
+            // the shader/threshold so every video draw site behaves identically.
+            useNoise = VideoBlit.noisy(signal)
+        } else {
+            // No picture. An ACTIVE radio link with no transmitter (signal ≈ 0)
+            // shows a dead-channel full of static; a strong-but-content-less feed
+            // or an unwired/cleared screen (signal high) just stays blank.
+            if (signal >= DEAD_SIGNAL || ScreenNoiseShader.instance == null) return
+            texId = whitePlaceholderId()
+            useNoise = true
+        }
+        val type = if (useNoise) VideoBlit.noiseTypeFor(texId) else VideoBlit.plainTypeFor(texId)
         val consumer = buffers.getBuffer(type)
+        // The noise shader reads the signal off vertex-colour alpha; the clean
+        // path forces opaque white so the blit shows the FBO verbatim.
+        val vAlpha = if (useNoise) signal else 1f
 
         poseStack.pushPose()
         val matrix = poseStack.last().pose()
-        // Flat emissive blit: the render type uses the position_tex_color shader,
-        // which applies NEITHER diffuse normal lighting NOR a lightmap, so the FBO
-        // content shows EXACTLY as drawn at full brightness — like a real monitor.
-        // (The old entity-solid shader multiplied by face-diffuse, dimming the whole
-        // screen to a muddy tint regardless of the FULL_BRIGHT lightmap.)
-        emitFace(consumer, matrix, facing, be.spanCols().toFloat(), be.spanRows().toFloat())
+        // Flat emissive blit: neither shader applies diffuse lighting nor a
+        // lightmap, so the FBO content shows EXACTLY as drawn at full brightness
+        // — like a real monitor.
+        emitFace(consumer, matrix, facing, be.spanCols().toFloat(), be.spanRows().toFloat(), vAlpha)
         poseStack.popPose()
     }
 
@@ -103,6 +121,7 @@ class ScreenBlockRenderer(
         facing: Direction,
         cols: Float,
         rows: Float,
+        vAlpha: Float,
     ) {
         val o = 0.001f // outset off the face plane
         // bl = bottom-left corner in block-local space; (rx, rz) = the face's
@@ -122,22 +141,24 @@ class ScreenBlockRenderer(
         // The GuiGraphics ortho (top-left origin, y-down) draws an UPRIGHT image
         // into the FBO; sampled with v=0 at the face bottom it shows upright, so
         // the face's bottom edge takes v=0 and the top edge v=1.
-        vertex(consumer, matrix, bl, 0f, 0f)
-        vertex(consumer, matrix, br, 1f, 0f)
-        vertex(consumer, matrix, tr, 1f, 1f)
-        vertex(consumer, matrix, tl, 0f, 1f)
+        vertex(consumer, matrix, bl, 0f, 0f, vAlpha)
+        vertex(consumer, matrix, br, 1f, 0f, vAlpha)
+        vertex(consumer, matrix, tr, 1f, 1f, vAlpha)
+        vertex(consumer, matrix, tl, 0f, 1f, vAlpha)
     }
 
-    /** POSITION_TEX vertex: position + UV only (the position_tex shader samples the
-     *  texture × the white shader-colour the setup shard forces — no lighting). */
+    /** POSITION_TEX_COLOR vertex: position + UV + colour. Colour is white with
+     *  [vAlpha] in the alpha channel — the noise shader reads it as the signal;
+     *  the clean shader leaves it opaque. */
     private fun vertex(
         consumer: VertexConsumer,
         matrix: Matrix4f,
         p: FloatArray,
         u: Float,
         v: Float,
+        vAlpha: Float,
     ) {
-        consumer.addVertex(matrix, p[0], p[1], p[2]).setUv(u, v)
+        consumer.addVertex(matrix, p[0], p[1], p[2]).setUv(u, v).setColor(1f, 1f, 1f, vAlpha)
     }
 
     /**
@@ -175,44 +196,25 @@ class ScreenBlockRenderer(
     }
 
     companion object {
-        /**
-         * A **flat, UNLIT** textured render type bound to a raw GL texture id. Uses
-         * the `position_tex_color` shader — sample(tex) × vertexColor — which applies
-         * neither diffuse normal lighting nor a lightmap, so the screen shows the FBO
-         * content exactly as drawn (a self-illuminated monitor). The setup shard binds
-         * the FBO colour attachment to sampler 0; the id is read fresh each frame.
-         */
-        private fun renderTypeFor(texId: Int): RenderType = RenderType.create(
-            "nodewire_screen",
-            DefaultVertexFormat.POSITION_TEX,
-            VertexFormat.Mode.QUADS,
-            256,
-            false,
-            false,
-            RenderType.CompositeState.builder()
-                .setShaderState(RenderStateShard.POSITION_TEX_SHADER)
-                .setTextureState(object : RenderStateShard.EmptyTextureStateShard(
-                    Runnable {
-                        RenderSystem.setShaderTexture(0, texId)
-                        // position_tex multiplies by the shader colour-modulator —
-                        // force it white so the blit shows the FBO content verbatim.
-                        RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
-                        // Force NEAREST EVERY frame (not just at surface creation):
-                        // the 256² FBO is magnified onto the face, and LINEAR blurs
-                        // thin text into the camera background (red→blue gradient).
-                        // Done here so it sticks regardless of when the surface was
-                        // allocated or whether the client was only hotswapped.
-                        com.mojang.blaze3d.platform.GlStateManager._bindTexture(texId)
-                        com.mojang.blaze3d.platform.GlStateManager._texParameter(
-                            GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST,
-                        )
-                        com.mojang.blaze3d.platform.GlStateManager._texParameter(
-                            GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST,
-                        )
-                    },
-                    Runnable {},
-                ) {})
-                .createCompositeState(false),
-        )
+        /** Below this signal, a screen with NO video handle is treated as a dead
+         *  channel (full static) rather than blank — i.e. an active radio link
+         *  whose transmitter is gone (signal 0). Above it a handle-less screen is
+         *  just blank (no link, or a received-but-content-less feed). */
+        private const val DEAD_SIGNAL = 0.1f
+
+        /** Lazily-created 1×1 white texture the dead-channel static samples
+         *  (the snow covers it; it only needs to be a valid bound texture). */
+        private var whiteTex: net.minecraft.client.renderer.texture.DynamicTexture? = null
+
+        private fun whitePlaceholderId(): Int {
+            var t = whiteTex
+            if (t == null) {
+                val img = com.mojang.blaze3d.platform.NativeImage(1, 1, false)
+                img.setPixelRGBA(0, 0, -1) // 0xFFFFFFFF
+                t = net.minecraft.client.renderer.texture.DynamicTexture(img)
+                whiteTex = t
+            }
+            return t.id
+        }
     }
 }

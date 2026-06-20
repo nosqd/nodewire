@@ -35,5 +35,6 @@ object NodewireNetwork {
         // Server → client packets
         registrar.playToClient(HighlightPacket.TYPE, HighlightPacket.STREAM_CODEC, HighlightPacket::handle)
         registrar.playToClient(StateDeltaPacket.TYPE, StateDeltaPacket.STREAM_CODEC, StateDeltaPacket::handle)
+        registrar.playToClient(SyncArStatePacket.TYPE, SyncArStatePacket.STREAM_CODEC, SyncArStatePacket::handle)
     }
 }

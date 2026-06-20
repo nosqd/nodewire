@@ -8,6 +8,7 @@ object RadioChannels {
     const val FREQ_PIN = "frequency"
     const val VIDEO_PIN = "video"
     const val RECEIVING_PIN = "receiving"
+    const val SIGNAL_PIN = "signal"
     const val CH_PREFIX = "ch"
 
     /** The nil/empty video handle (matches ScreenBlockEntity / PinValue.default(VIDEO)). */

@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "nodewire:block/ar_hub_block" }
+  }
+}

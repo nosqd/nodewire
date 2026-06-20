@@ -204,26 +204,46 @@ abstract class ScriptModule {
         // hidden replicated cell that rides the normal replication path (delta +
         // late-join piggyback + persist), and is copied back into inputs on the
         // client. This makes `input<Video>(name).value` just work in clientBehavior.
-        if (T::class == Video::class) registerVideoInputMirror(name)
+        if (T::class == Video::class) {
+            registerVideoInputMirror(name)
+            // Ensure inputs[name] starts with a valid non-null Video sentinel
+            // so reads before the first replication don't NPE (analogous to
+            // output<Video>'s initialisation in the output function below).
+            if (inputs[name] == null) inputs[name] = Video(java.util.UUID(0L, 0L))
+        }
         return object : Input<T> {
             @Suppress("UNCHECKED_CAST")
-            override val value: T get() = inputs[name] as T
+            override val value: T get() {
+                // If we are on the client, only allow accessing the value of Video inputs
+                if (clientSide && T::class != Video::class) {
+                    throw ScriptDeclException("input '$name' value is not available on the client — copy it to a replicated state variable in tick {} first")
+                }
+                return inputs[name] as T
+            }
         }
     }
 
-    /** Ensure a hidden replicated [StateCell] mirrors the VIDEO input [name]. */
+    /** Ensure hidden replicated [StateCell]s mirror the VIDEO input [name]: the
+     *  handle (VIDEO cell) and its reception signal (a plain FLOAT cell, so the
+     *  VIDEO save format stays untouched). */
     @PublishedApi internal fun registerVideoInputMirror(name: String) {
         val key = videoMirrorKey(name)
         if (stateCells.any { it.key == key }) return
         stateCells += StateCell(key, Video(java.util.UUID(0L, 0L)), StateKind.VIDEO, replicated = true)
+        stateCells += StateCell(videoSigKey(name), 1f, StateKind.FLOAT, replicated = true)
     }
 
-    /** CLIENT: copy each mirrored VIDEO cell back into [inputs] so the input
-     *  handle returns the replicated value. Called after [ScriptModuleReplication.applyCells]. */
+    /** CLIENT: recombine each mirrored VIDEO handle + its signal cell into
+     *  [inputs] so `input<Video>().value` returns the replicated handle WITH its
+     *  reception signal (drives `image()`'s noise). Called after
+     *  [ScriptModuleReplication.applyCells]. */
     @PublishedApi internal fun applyVideoInputMirrors() {
         for (cell in stateCells) {
             if (!cell.key.startsWith(VIDEO_MIRROR_PREFIX)) continue
-            inputs[cell.key.substring(VIDEO_MIRROR_PREFIX.length)] = cell.value
+            val name = cell.key.substring(VIDEO_MIRROR_PREFIX.length)
+            val handle = (cell.value as? Video)?.handle ?: java.util.UUID(0L, 0L)
+            val sig = (stateCells.firstOrNull { it.key == videoSigKey(name) }?.value as? Float) ?: 1f
+            inputs[name] = Video(handle, sig)
         }
     }
 
@@ -569,6 +589,12 @@ abstract class ScriptModule {
         @PublishedApi internal const val VIDEO_MIRROR_PREFIX = "__vin."
 
         @PublishedApi internal fun videoMirrorKey(name: String) = "$VIDEO_MIRROR_PREFIX$name"
+
+        /** Hidden FLOAT-cell key prefix for a mirrored VIDEO input's signal
+         *  (distinct from [VIDEO_MIRROR_PREFIX] so the mirror scan skips it). */
+        @PublishedApi internal const val VIDEO_SIG_PREFIX = "__vsig."
+
+        @PublishedApi internal fun videoSigKey(name: String) = "$VIDEO_SIG_PREFIX$name"
 
         /** Hidden-cell key prefix for server-minted VIDEO output handles. */
         @PublishedApi internal const val VIDEO_OUT_PREFIX = "__vout."

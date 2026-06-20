@@ -31,9 +31,13 @@ import net.minecraft.world.phys.Vec3
  *  * `ch0…ch15` (ANY) — the data bus, mirroring the strongest matching TX.
  *  * `video` (VIDEO) — the one video handle (or NIL when nothing is received).
  *  * `receiving` (BOOL) — true while a TX on this frequency is in range.
+ *  * `signal` (FLOAT 0..1) — reception strength: 1 at the transmitter, → 0 at
+ *    the edge of reach (drives the screen's noise shader). 0 when not receiving.
  *
  * "Strongest wins": among TXs on the tuned frequency that are in range, the one
- * with the greatest `gain / dist²` is mirrored (see [RadioRegistry.best]).
+ * with the greatest signal strength — `(txGain·gT)·(rxGain·gR) / dist²`, where
+ * gT/gR are the transmit/receive directional lobe factors (1.0 for omni
+ * antennas) — is mirrored (see [RadioRegistry.best] for the full formula).
  */
 class RadioReceiverBlockEntity(pos: BlockPos, state: BlockState) :
     BlockEntity(Registry.RADIO_RECEIVER_BE.get(), pos, state),
@@ -51,9 +55,9 @@ class RadioReceiverBlockEntity(pos: BlockPos, state: BlockState) :
     // Tuned frequency — delivered live each tick into the FREQ input pin.
     private var frequency: Float = 0f
 
-    // Per-tick resolved transmitter (cached so all output reads in a tick agree).
+    // Per-tick resolved reception (cached so all output reads in a tick agree).
     private var cacheTick: Long = Long.MIN_VALUE
-    private var cached: RadioRegistry.TxEntry? = null
+    private var cached: RadioRegistry.Match? = null
 
     override fun pinInputs(ctx: LinkContext): List<LinkPin> =
         listOf(LinkPin(RadioChannels.FREQ_PIN, PinType.FLOAT, "frequency"))
@@ -62,6 +66,7 @@ class RadioReceiverBlockEntity(pos: BlockPos, state: BlockState) :
         for (i in 0 until RadioChannels.NUM_CHANNELS) add(LinkPin(RadioChannels.chId(i), PinType.ANY, "ch$i"))
         add(LinkPin(RadioChannels.VIDEO_PIN, PinType.VIDEO, "video"))
         add(LinkPin(RadioChannels.RECEIVING_PIN, PinType.BOOL, "receiving"))
+        add(LinkPin(RadioChannels.SIGNAL_PIN, PinType.FLOAT, "signal"))
     }
 
     override fun writePin(id: String, value: PinValue) {
@@ -81,19 +86,24 @@ class RadioReceiverBlockEntity(pos: BlockPos, state: BlockState) :
     override fun readPin(id: String): PinReading? {
         val lvl = level ?: return null
         if (lvl.isClientSide) return null
-        val tx = resolve(lvl)
+        val m = resolve(lvl)
         return when {
-            id == RadioChannels.RECEIVING_PIN -> PinReading(PinValue.Bool(tx != null))
-            id == RadioChannels.VIDEO_PIN -> PinReading(PinValue.Video(tx?.video ?: RadioChannels.NIL_HANDLE))
+            id == RadioChannels.RECEIVING_PIN -> PinReading(PinValue.Bool(m != null))
+            id == RadioChannels.SIGNAL_PIN -> PinReading(PinValue.Float(m?.signal ?: 0f))
+            // Carry the reception signal IN the video value so the screen degrades
+            // radio video automatically — a direct camera/wired feed stays signal=1.
+            // No transmitter → signal 0 so the screen shows a dead-channel of static.
+            id == RadioChannels.VIDEO_PIN ->
+                PinReading(PinValue.Video(m?.tx?.video ?: RadioChannels.NIL_HANDLE, m?.signal ?: 0f))
             else -> {
                 val i = RadioChannels.chIndex(id) ?: return null
-                PinReading(tx?.slots?.getOrNull(i) ?: PinValue.default(PinType.ANY))
+                PinReading(m?.tx?.slots?.getOrNull(i) ?: PinValue.default(PinType.ANY))
             }
         }
     }
 
     /** Resolve (once per tick) the strongest TX on the tuned frequency in range. */
-    private fun resolve(level: Level): RadioRegistry.TxEntry? {
+    private fun resolve(level: Level): RadioRegistry.Match? {
         val now = level.gameTime
         if (now != cacheTick) {
             cacheTick = now
@@ -101,8 +111,7 @@ class RadioReceiverBlockEntity(pos: BlockPos, state: BlockState) :
                 level = level,
                 freqKey = RadioRegistry.freqKey(frequency),
                 rxCenter = worldCenter(level),
-                rxRange = antenna.range(),
-                rxCrossWorld = antenna.crossWorld(),
+                rx = antennaProfile(),
                 now = now,
             )
         }

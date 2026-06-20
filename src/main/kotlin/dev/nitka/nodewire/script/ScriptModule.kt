@@ -223,19 +223,27 @@ abstract class ScriptModule {
         }
     }
 
-    /** Ensure a hidden replicated [StateCell] mirrors the VIDEO input [name]. */
+    /** Ensure hidden replicated [StateCell]s mirror the VIDEO input [name]: the
+     *  handle (VIDEO cell) and its reception signal (a plain FLOAT cell, so the
+     *  VIDEO save format stays untouched). */
     @PublishedApi internal fun registerVideoInputMirror(name: String) {
         val key = videoMirrorKey(name)
         if (stateCells.any { it.key == key }) return
         stateCells += StateCell(key, Video(java.util.UUID(0L, 0L)), StateKind.VIDEO, replicated = true)
+        stateCells += StateCell(videoSigKey(name), 1f, StateKind.FLOAT, replicated = true)
     }
 
-    /** CLIENT: copy each mirrored VIDEO cell back into [inputs] so the input
-     *  handle returns the replicated value. Called after [ScriptModuleReplication.applyCells]. */
+    /** CLIENT: recombine each mirrored VIDEO handle + its signal cell into
+     *  [inputs] so `input<Video>().value` returns the replicated handle WITH its
+     *  reception signal (drives `image()`'s noise). Called after
+     *  [ScriptModuleReplication.applyCells]. */
     @PublishedApi internal fun applyVideoInputMirrors() {
         for (cell in stateCells) {
             if (!cell.key.startsWith(VIDEO_MIRROR_PREFIX)) continue
-            inputs[cell.key.substring(VIDEO_MIRROR_PREFIX.length)] = cell.value
+            val name = cell.key.substring(VIDEO_MIRROR_PREFIX.length)
+            val handle = (cell.value as? Video)?.handle ?: java.util.UUID(0L, 0L)
+            val sig = (stateCells.firstOrNull { it.key == videoSigKey(name) }?.value as? Float) ?: 1f
+            inputs[name] = Video(handle, sig)
         }
     }
 
@@ -581,6 +589,12 @@ abstract class ScriptModule {
         @PublishedApi internal const val VIDEO_MIRROR_PREFIX = "__vin."
 
         @PublishedApi internal fun videoMirrorKey(name: String) = "$VIDEO_MIRROR_PREFIX$name"
+
+        /** Hidden FLOAT-cell key prefix for a mirrored VIDEO input's signal
+         *  (distinct from [VIDEO_MIRROR_PREFIX] so the mirror scan skips it). */
+        @PublishedApi internal const val VIDEO_SIG_PREFIX = "__vsig."
+
+        @PublishedApi internal fun videoSigKey(name: String) = "$VIDEO_SIG_PREFIX$name"
 
         /** Hidden-cell key prefix for server-minted VIDEO output handles. */
         @PublishedApi internal const val VIDEO_OUT_PREFIX = "__vout."

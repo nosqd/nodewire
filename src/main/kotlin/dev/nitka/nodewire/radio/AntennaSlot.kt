@@ -10,9 +10,17 @@ import net.neoforged.neoforge.items.ItemStackHandler
  * inheritance — the two BEs differ otherwise). Holds one [RadioAntennaItem];
  * with none, the radio still works at a short built-in range.
  */
-/** A BlockEntity that exposes an [AntennaSlot] (TX + RX). */
+/** A BlockEntity that exposes an antenna (TX + RX). */
 interface AntennaHost {
     fun radioAntenna(): AntennaSlot
+
+    /**
+     * The resolved antenna characteristics. Single-block radios delegate to the
+     * item in their [radioAntenna] slot (always omnidirectional); a multiblock
+     * controller overrides this to return a directional profile from its
+     * structure.
+     */
+    fun antennaProfile(): AntennaProfile = radioAntenna().profile()
 }
 
 class AntennaSlot {
@@ -33,6 +41,9 @@ class AntennaSlot {
 
     /** Whether the installed antenna can bridge across dimensions. */
     fun crossWorld(): Boolean = antenna()?.crossWorld ?: false
+
+    /** This slot's antenna as a [AntennaProfile] — always omnidirectional. */
+    fun profile(): AntennaProfile = AntennaProfile(range(), gain(), crossWorld())
 
     fun save(tag: CompoundTag, registries: HolderLookup.Provider) {
         tag.put(KEY, handler.serializeNBT(registries))

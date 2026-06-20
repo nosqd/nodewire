@@ -84,15 +84,18 @@ class RadioTransmitterBlockEntity(pos: BlockPos, state: BlockState) :
 
     /** Publish the live payload to the registry (called from the server ticker). */
     fun publish(level: Level) {
+        val p = antennaProfile()
         RadioRegistry.publish(
             level,
             RadioRegistry.TxEntry(
                 pos = blockPos,
                 center = worldCenter(level),
                 freqKey = RadioRegistry.freqKey(frequency),
-                range = antenna.range(),
-                gain = antenna.gain(),
-                crossWorld = antenna.crossWorld(),
+                range = p.range,
+                gain = p.gain,
+                crossWorld = p.crossWorld,
+                aim = p.aim,
+                focus = p.focus,
                 slots = slots.copyOf(),
                 video = videoHandle,
                 stamp = level.gameTime,

@@ -124,23 +124,14 @@ class NwCanvasVideoCanvas(
         // the bound FBO, and later verbs flush on top at the end of the frame.
         nw.flush()
 
-        val x0 = r.x.toFloat()
-        val y0 = r.y.toFloat()
-        val x1 = (r.x + r.w).toFloat()
-        val y1 = (r.y + r.h).toFloat()
-        RenderSystem.enableBlend()
-        RenderSystem.defaultBlendFunc()
-        RenderSystem.disableCull()
-        RenderSystem.setShader { GameRenderer.getPositionTexShader() }
-        RenderSystem.setShaderTexture(0, texId)
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
-        val buf = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX)
-        // FBO colour textures are bottom-up → flip V so the source shows upright.
-        buf.addVertex(x0, y0, 0f).setUv(0f, 1f) // top-left
-        buf.addVertex(x0, y1, 0f).setUv(0f, 0f) // bottom-left
-        buf.addVertex(x1, y1, 0f).setUv(1f, 0f) // bottom-right
-        buf.addVertex(x1, y0, 0f).setUv(1f, 1f) // top-right
-        BufferUploader.drawWithShader(buf.buildOrThrow())
+        // The single video pipeline — signal-driven noise, identical to the
+        // Screen block and the AR HUD (it V-flips the bottom-up FBO).
+        VideoBlit.blit(
+            texId,
+            r.x.toFloat(), r.y.toFloat(),
+            (r.x + r.w).toFloat(), (r.y + r.h).toFloat(),
+            video.signal,
+        )
     }
 
     /** Narrow the low 32 bits of the packed-ARGB `Long` to the mod's [Color]. */

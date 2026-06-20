@@ -35,7 +35,12 @@ object CameraProjection {
             val eye = camera.position
             val yawDeg = camera.yRot
             val pitchDeg = camera.xRot
-            val fovYDeg = mc.options.fov().get().toDouble()
+            // EFFECTIVE FOV, not the base setting: multiply the base by the
+            // renderer's smoothed sprint/speed FOV factor (lerped oldFov→fov by
+            // the frame partial tick) so markers stay locked while you run/stop.
+            val partial = mc.timer.getGameTimeDeltaPartialTick(true)
+            val fovMul = net.minecraft.util.Mth.lerp(partial, mc.gameRenderer.oldFov, mc.gameRenderer.fov).toDouble()
+            val fovYDeg = mc.options.fov().get().toDouble() * fovMul
             return WorldToScreen.project(
                 eye.x, eye.y, eye.z,
                 yawDeg, pitchDeg,

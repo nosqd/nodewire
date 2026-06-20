@@ -9,7 +9,7 @@ import net.minecraft.resources.ResourceLocation
 import net.neoforged.neoforge.network.handling.IPayloadContext
 import java.util.UUID
 
-data class SyncArStatePacket(val videoHandle: UUID) : CustomPacketPayload {
+data class SyncArStatePacket(val videoHandle: UUID, val signal: Float) : CustomPacketPayload {
 
     override fun type(): CustomPacketPayload.Type<SyncArStatePacket> = TYPE
 
@@ -22,16 +22,18 @@ data class SyncArStatePacket(val videoHandle: UUID) : CustomPacketPayload {
             object : StreamCodec<RegistryFriendlyByteBuf, SyncArStatePacket> {
                 override fun encode(buf: RegistryFriendlyByteBuf, pkt: SyncArStatePacket) {
                     buf.writeUUID(pkt.videoHandle)
+                    buf.writeFloat(pkt.signal)
                 }
 
                 override fun decode(buf: RegistryFriendlyByteBuf): SyncArStatePacket {
-                    return SyncArStatePacket(buf.readUUID())
+                    return SyncArStatePacket(buf.readUUID(), buf.readFloat())
                 }
             }
 
         fun handle(packet: SyncArStatePacket, ctx: IPayloadContext) {
             ctx.enqueueWork {
                 ArClientState.activeHandle = packet.videoHandle
+                ArClientState.activeSignal = packet.signal
             }
         }
     }

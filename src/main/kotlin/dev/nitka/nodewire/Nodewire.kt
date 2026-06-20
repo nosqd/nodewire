@@ -37,6 +37,12 @@ object Nodewire {
         // CBC ballistics for scripts (Cbc.shells()/solvePitch) + cannon-mount
         // yaw/pitch pins. Internally ModList-gated — safe no-op without CBC.
         dev.nitka.nodewire.integration.cbc.CbcIntegration.init()
+        // Pin links survive Sable schematic copy-paste (blueprint mapper). Run at
+        // common setup so the BE types are registered + .get()-able; internally
+        // gated on the sable_schematic_api mod, so it's a safe no-op without it.
+        MOD_BUS.addListener<net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent> {
+            dev.nitka.nodewire.integration.sable.SableSchematicIntegration.register()
+        }
         // Coarse server-side teardown: cancel every server script coroutine when
         // the (integrated or dedicated) server stops. Per-BE setRemoved handles
         // the common case, but a server stop without unloading each BE would leave

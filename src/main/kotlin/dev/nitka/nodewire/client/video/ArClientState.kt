@@ -1,15 +1,10 @@
 package dev.nitka.nodewire.client.video
 
 import com.mojang.blaze3d.systems.RenderSystem
-import com.mojang.blaze3d.vertex.BufferUploader
-import com.mojang.blaze3d.vertex.DefaultVertexFormat
-import com.mojang.blaze3d.vertex.Tesselator
-import com.mojang.blaze3d.vertex.VertexFormat
 import dev.nitka.nodewire.item.ArGlassesItem
 import dev.nitka.nodewire.radio.RadioChannels
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
-import net.minecraft.client.renderer.GameRenderer
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.EquipmentSlot
 import net.neoforged.neoforge.client.event.ClientTickEvent
@@ -19,6 +14,12 @@ import java.util.UUID
 object ArClientState {
     @Volatile
     var activeHandle: UUID = RadioChannels.NIL_HANDLE
+
+    /** Reception signal 0..1 of the active video (carried from the Hub). Drives
+     *  the same noise shader the Screen block uses, so radio video degrades on
+     *  the AR HUD exactly as it does on a screen. 1 = clean. */
+    @Volatile
+    var activeSignal: Float = 1f
 
     private var wasWearingLastTick = false
 
@@ -66,22 +67,11 @@ object ArClientState {
 
             val surface = VideoManager.getOrCreate(activeHandle) as? GlVideoSurface ?: return
             val texId = surface.colorTextureId()
-            val w = mc.window.guiScaledWidth
-            val h = mc.window.guiScaledHeight
-
-            RenderSystem.enableBlend()
-            RenderSystem.defaultBlendFunc()
-            RenderSystem.disableCull()
-            RenderSystem.setShader { GameRenderer.getPositionTexShader() }
-            RenderSystem.setShaderTexture(0, texId)
-            RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
-            val buf = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX)
-            // Full-screen quad. FBO textures are bottom-up → V flipped.
-            buf.addVertex(0f, 0f, 0f).setUv(0f, 1f)
-            buf.addVertex(0f, h.toFloat(), 0f).setUv(0f, 0f)
-            buf.addVertex(w.toFloat(), h.toFloat(), 0f).setUv(1f, 0f)
-            buf.addVertex(w.toFloat(), 0f, 0f).setUv(1f, 1f)
-            BufferUploader.drawWithShader(buf.buildOrThrow())
+            val w = mc.window.guiScaledWidth.toFloat()
+            val h = mc.window.guiScaledHeight.toFloat()
+            // Full-screen feed through the single video pipeline (signal-driven
+            // noise — identical to the Screen block and script image()).
+            VideoBlit.blit(texId, 0f, 0f, w, h, activeSignal)
         } finally {
             RenderSystem.enableDepthTest()
         }

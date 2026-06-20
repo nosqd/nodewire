@@ -53,9 +53,16 @@ internal fun ScriptModule.pushInputs(incoming: Map<String, PinValue>) {
     for (cell in stateCells) {
         if (!cell.key.startsWith(ScriptModule.VIDEO_MIRROR_PREFIX)) continue
         val inName = cell.key.substring(ScriptModule.VIDEO_MIRROR_PREFIX.length)
-        val v = inputs[inName] ?: Video(java.util.UUID(0L, 0L))
+        val v = inputs[inName] as? Video ?: Video(java.util.UUID(0L, 0L))
         @Suppress("UNCHECKED_CAST")
         (cell as StateCell<Any?>).value = v
+        // Mirror the reception signal alongside the handle (a plain FLOAT cell, so
+        // no VIDEO save-format change) — the client recombines them into the input.
+        val sig = stateCells.firstOrNull { it.key == ScriptModule.videoSigKey(inName) }
+        if (sig != null) {
+            @Suppress("UNCHECKED_CAST")
+            (sig as StateCell<Any?>).value = v.signal
+        }
     }
     // SERVER: ensure each VIDEO output carries its minted per-node handle
     // (replicated to the client via its hidden cell; persisted with state).
@@ -120,7 +127,7 @@ private fun unbox(v: PinValue): Any = when (v) {
     is PinValue.Vec2 -> Vec2(v.x, v.y)
     is PinValue.Vec3 -> Vec3(v.x, v.y, v.z)
     is PinValue.Quat -> Quat(v.x, v.y, v.z, v.w)
-    is PinValue.Video -> Video(v.handle)
+    is PinValue.Video -> Video(v.handle, v.signal)
 }
 
 /**
@@ -137,7 +144,7 @@ private fun box(value: Any?, type: PinType): PinValue = when (type) {
     PinType.VEC2 -> (value as Vec2).let { PinValue.Vec2(it.x, it.y) }
     PinType.VEC3 -> (value as Vec3).let { PinValue.Vec3(it.x, it.y, it.z) }
     PinType.QUAT -> (value as Quat).let { PinValue.Quat(it.x, it.y, it.z, it.w) }
-    PinType.VIDEO -> PinValue.Video((value as Video).handle)
+    PinType.VIDEO -> (value as Video).let { PinValue.Video(it.handle, it.signal) }
     PinType.ANY -> value as PinValue
 }
 

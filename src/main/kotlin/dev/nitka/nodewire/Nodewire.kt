@@ -37,6 +37,8 @@ object Nodewire {
         // CBC ballistics for scripts (Cbc.shells()/solvePitch) + cannon-mount
         // yaw/pitch pins. Internally ModList-gated — safe no-op without CBC.
         dev.nitka.nodewire.integration.cbc.CbcIntegration.init()
+        // Nodewire Flap Bearing — requires Create Compact Flap. ModList-gated.
+        dev.nitka.nodewire.integration.compactflap.CompactFlapIntegration.init(MOD_BUS)
         // Pin links survive Sable schematic copy-paste (blueprint mapper). Run at
         // common setup so the BE types are registered + .get()-able; internally
         // gated on the sable_schematic_api mod, so it's a safe no-op without it.

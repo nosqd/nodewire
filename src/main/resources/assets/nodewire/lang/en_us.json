@@ -19,5 +19,6 @@
   "key.categories.nodewire": "Nodewire",
   "key.nodewire.open_demo": "Open UI demo (dev)",
   "key.nodewire.control_mouse": "Control Block: toggle mouse capture",
-  "key.nodewire.control_exit": "Control Block: exit session"
+  "key.nodewire.control_exit": "Control Block: exit session",
+  "block.nodewire.nodewire_flap_bearing": "Nodewire Flap Bearing"
 }

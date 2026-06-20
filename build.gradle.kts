@@ -60,9 +60,14 @@ repositories {
         forRepository { maven { url = uri("https://api.modrinth.com/maven") } }
         filter { includeGroup("maven.modrinth") }
     }
-    // Curse Maven dropped: every mod we used to pull from it (Aeronautics,
-    // Tweaked Controllers) now comes from Modrinth — cursemaven.com answers
-    // 402 Payment Required for those monetized listings, which broke CI.
+    // Curse Maven — only for Compact Flap (not on Modrinth).
+    // Re-enabled with a narrow content filter so only the one mod resolves.
+    exclusiveContent {
+        forRepository {
+            maven { url = uri("https://cursemaven.com") }
+        }
+        filter { includeGroup("curse.maven") }
+    }
 }
 
 // The optional :scripting addon is loaded into core's dev runs (neoForge.mods
@@ -293,6 +298,9 @@ dependencies {
     // :slim + isTransitive = false: skip Create's POM-declared optional deps
     // (CC:Tweaked, Architectury, etc.) so we control versions explicitly.
     // Per the official Create wiki recipe for 1.21.1.
+    // Create Compact Flap — Nodewire Flap Bearing integration (compile-only).
+    compileOnly("curse.maven:create-compact-flap-1530869:8031969")
+
     implementation("com.simibubi.create:create-${mcVer}:6.0.10-280:slim") {
         isTransitive = false
     }

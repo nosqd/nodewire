@@ -37,6 +37,8 @@ object Nodewire {
         // CBC ballistics for scripts (Cbc.shells()/solvePitch) + cannon-mount
         // yaw/pitch pins. Internally ModList-gated — safe no-op without CBC.
         dev.nitka.nodewire.integration.cbc.CbcIntegration.init()
+        // Nodewire Flap Bearing — requires Create Compact Flap. ModList-gated.
+        dev.nitka.nodewire.integration.compactflap.CompactFlapIntegration.init(MOD_BUS)
         // Coarse server-side teardown: cancel every server script coroutine when
         // the (integrated or dedicated) server stops. Per-BE setRemoved handles
         // the common case, but a server stop without unloading each BE would leave
